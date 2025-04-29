@@ -252,3 +252,59 @@ resource "aws_iam_role_policy_attachment" "fargate_policies" {
   role       = aws_iam_role.fargate[each.key].name
   policy_arn = "arn:aws:iam::aws:policy/AmazonEKSFargatePodExecutionRolePolicy"
 } 
+
+
+# Node Group Security Configuration
+resource "aws_launch_template" "node_group" {
+  for_each = var.managed_node_groups
+
+  name_prefix   = "${var.cluster_name}-${each.key}-"
+  image_id      = data.aws_ami.eks_optimized[each.key].id
+  instance_type = each.value.instance_types[0]
+
+  metadata_options {
+    http_endpoint               = "enabled"
+    http_tokens                 = "required"  # Enforce IMDSv2
+    http_put_response_hop_limit = 2
+  }
+
+  tag_specifications {
+    resource_type = "instance"
+    tags = merge(
+      var.tags,
+      each.value.tags,
+      {
+        Name = "${var.cluster_name}-${each.key}-node"
+      }
+    )
+  }
+
+  tag_specifications {
+    resource_type = "volume"
+    tags = merge(
+      var.tags,
+      each.value.tags,
+      {
+        Name = "${var.cluster_name}-${each.key}-volume"
+      }
+    )
+  }
+}
+
+# EKS Optimized AMI data source
+data "aws_ami" "eks_optimized" {
+  for_each = var.managed_node_groups
+
+  most_recent = true
+  owners      = ["amazon"]
+
+  filter {
+    name   = "name"
+    values = ["amazon-eks-node-${var.kubernetes_version}-*"]
+  }
+
+  filter {
+    name   = "architecture"
+    values = ["x86_64"]
+  }
+}
