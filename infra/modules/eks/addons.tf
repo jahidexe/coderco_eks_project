@@ -19,9 +19,25 @@ resource "aws_eks_addon" "vpc_cni" {
 
   cluster_name                = aws_eks_cluster.this.name
   addon_name                 = "vpc-cni"
-  addon_version              = "v1.12.0-eksbuild.1"
-  resolve_conflicts_on_create = "OVERWRITE"
-  resolve_conflicts_on_update = "OVERWRITE"
+  addon_version              = var.addon_version_preferences.vpc_cni == "latest" ? data.aws_eks_addon_version.vpc_cni[0].version : var.addon_version_preferences.vpc_cni
+  resolve_conflicts_on_create = var.addon_conflict_resolution.on_create
+  resolve_conflicts_on_update = var.addon_conflict_resolution.on_update
+  configuration_values       = jsonencode(var.addon_configurations.vpc_cni)
+  service_account_role_arn   = aws_iam_role.aws_load_balancer_controller[0].arn
+
+  timeouts {
+    create = var.addon_timeouts.create
+    update = var.addon_timeouts.update
+    delete = var.addon_timeouts.delete
+  }
+
+  tags = merge(
+    var.tags,
+    var.addon_tags,
+    {
+      Name = "${var.cluster_name}-vpc-cni"
+    }
+  )
 
   depends_on = [
     aws_eks_node_group.this
@@ -32,10 +48,26 @@ resource "aws_eks_addon" "vpc_cni" {
 resource "aws_eks_addon" "coredns" {
   count = var.enable_coredns ? 1 : 0
 
-  cluster_name      = aws_eks_cluster.this.name
-  addon_name        = "coredns"
-  addon_version     = "v1.9.3-eksbuild.2"
-  resolve_conflicts = "OVERWRITE"
+  cluster_name                = aws_eks_cluster.this.name
+  addon_name                 = "coredns"
+  addon_version              = var.addon_version_preferences.coredns == "latest" ? data.aws_eks_addon_version.coredns[0].version : var.addon_version_preferences.coredns
+  resolve_conflicts_on_create = var.addon_conflict_resolution.on_create
+  resolve_conflicts_on_update = var.addon_conflict_resolution.on_update
+  configuration_values       = jsonencode(var.addon_configurations.coredns)
+
+  timeouts {
+    create = var.addon_timeouts.create
+    update = var.addon_timeouts.update
+    delete = var.addon_timeouts.delete
+  }
+
+  tags = merge(
+    var.tags,
+    var.addon_tags,
+    {
+      Name = "${var.cluster_name}-coredns"
+    }
+  )
 
   depends_on = [
     aws_eks_node_group.this
@@ -46,10 +78,57 @@ resource "aws_eks_addon" "coredns" {
 resource "aws_eks_addon" "kube_proxy" {
   count = var.enable_kube_proxy ? 1 : 0
 
-  cluster_name      = aws_eks_cluster.this.name
-  addon_name        = "kube-proxy"
-  addon_version     = "v1.24.7-eksbuild.2"
-  resolve_conflicts = "OVERWRITE"
+  cluster_name                = aws_eks_cluster.this.name
+  addon_name                 = "kube-proxy"
+  addon_version              = var.addon_version_preferences.kube_proxy == "latest" ? data.aws_eks_addon_version.kube_proxy[0].version : var.addon_version_preferences.kube_proxy
+  resolve_conflicts_on_create = var.addon_conflict_resolution.on_create
+  resolve_conflicts_on_update = var.addon_conflict_resolution.on_update
+  configuration_values       = jsonencode(var.addon_configurations.kube_proxy)
+
+  timeouts {
+    create = var.addon_timeouts.create
+    update = var.addon_timeouts.update
+    delete = var.addon_timeouts.delete
+  }
+
+  tags = merge(
+    var.tags,
+    var.addon_tags,
+    {
+      Name = "${var.cluster_name}-kube-proxy"
+    }
+  )
+
+  depends_on = [
+    aws_eks_node_group.this
+  ]
+}
+
+# EBS CSI Driver Add-on
+resource "aws_eks_addon" "ebs_csi" {
+  count = var.enable_ebs_csi_driver ? 1 : 0
+
+  cluster_name                = aws_eks_cluster.this.name
+  addon_name                 = "aws-ebs-csi-driver"
+  addon_version              = var.addon_version_preferences.ebs_csi == "latest" ? data.aws_eks_addon_version.ebs_csi[0].version : var.addon_version_preferences.ebs_csi
+  resolve_conflicts_on_create = var.addon_conflict_resolution.on_create
+  resolve_conflicts_on_update = var.addon_conflict_resolution.on_update
+  configuration_values       = jsonencode(var.addon_configurations.ebs_csi)
+  service_account_role_arn   = aws_iam_role.ebs_csi_driver[0].arn
+
+  timeouts {
+    create = var.addon_timeouts.create
+    update = var.addon_timeouts.update
+    delete = var.addon_timeouts.delete
+  }
+
+  tags = merge(
+    var.tags,
+    var.addon_tags,
+    {
+      Name = "${var.cluster_name}-ebs-csi-driver"
+    }
+  )
 
   depends_on = [
     aws_eks_node_group.this
