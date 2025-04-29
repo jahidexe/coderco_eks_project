@@ -11,24 +11,24 @@ locals {
       Terraform   = "true"
     }
   )
-  
+
   # Calculate the number of NAT Gateways needed
   nat_gateway_count = var.single_nat_gateway ? 1 : length(var.private_subnet_cidrs)
-  
+
   # EKS-specific subnet tags
   eks_subnet_tags = {
     "kubernetes.io/role/elb"           = "1"
     "kubernetes.io/role/internal-elb"  = "1"
     "kubernetes.io/cluster/${var.cluster_name}" = "shared"
   }
-  
+
   # Combine EKS tags with custom annotations if enabled
   public_subnet_tags = merge(
     var.public_subnet_tags,
     var.subnet_tags_for_eks ? local.eks_subnet_tags : {},
     var.eks_subnet_annotations
   )
-  
+
   private_subnet_tags = merge(
     var.private_subnet_tags,
     var.subnet_tags_for_eks ? local.eks_subnet_tags : {},
@@ -216,10 +216,10 @@ resource "aws_vpc_endpoint" "s3" {
 
 # EKS VPC Endpoint
 resource "aws_vpc_endpoint" "eks" {
-  vpc_id            = aws_vpc.main.id
-  service_name      = "com.amazonaws.${var.region}.eks"
-  vpc_endpoint_type = "Interface"
-  subnet_ids        = aws_subnet.private[*].id
+  vpc_id              = aws_vpc.main.id
+  service_name        = "com.amazonaws.${var.region}.eks"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = aws_subnet.private[*].id
   private_dns_enabled = true
 
   tags = merge(
@@ -234,29 +234,7 @@ resource "aws_vpc_endpoint" "eks" {
 resource "aws_default_security_group" "default" {
   vpc_id = aws_vpc.main.id
 
-  # Explicitly deny all ingress traffic
-  ingress {
-    description      = "Deny all ingress traffic"
-    from_port        = 0
-    to_port          = 0
-    protocol         = "-1"
-    cidr_blocks      = []
-    ipv6_cidr_blocks = []
-    prefix_list_ids  = []
-    self             = false
-  }
-
-  # Explicitly deny all egress traffic
-  egress {
-    description      = "Deny all egress traffic"
-    from_port        = 0
-    to_port          = 0
-    protocol         = "-1"
-    cidr_blocks      = []
-    ipv6_cidr_blocks = []
-    prefix_list_ids  = []
-    self             = false
-  }
+  # No ingress or egress rules (CKV2_AWS_12 compliant)
 
   tags = merge(
     local.common_tags,
@@ -265,6 +243,5 @@ resource "aws_default_security_group" "default" {
     }
   )
 
-  # Ensure this is created after the VPC
   depends_on = [aws_vpc.main]
 }
