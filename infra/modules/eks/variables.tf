@@ -20,6 +20,11 @@ variable "vpc_id" {
 variable "subnet_ids" {
   description = "List of subnet IDs for the EKS cluster (should include both private and public subnets)"
   type        = list(string)
+
+  validation {
+    condition     = length(var.subnet_ids) > 0
+    error_message = "At least one subnet ID must be provided for the EKS cluster."
+  }
 }
 
 variable "endpoint_private_access" {
