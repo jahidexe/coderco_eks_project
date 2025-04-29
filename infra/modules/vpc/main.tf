@@ -42,7 +42,7 @@ resource "aws_vpc" "main" {
   instance_tenancy     = var.instance_tenancy
   enable_dns_support   = var.enable_dns_support
   enable_dns_hostnames = var.enable_dns_hostnames
-  
+
   tags = merge(
     local.common_tags,
     var.vpc_tags,
@@ -59,7 +59,7 @@ resource "aws_subnet" "public" {
   cidr_block              = var.public_subnet_cidrs[count.index]
   availability_zone       = element(var.azs, count.index)
   map_public_ip_on_launch = var.map_public_ip_on_launch
-  
+
   tags = merge(
     local.common_tags,
     local.public_subnet_tags,
@@ -74,7 +74,7 @@ resource "aws_subnet" "private" {
   vpc_id            = aws_vpc.main.id
   cidr_block        = var.private_subnet_cidrs[count.index]
   availability_zone = element(var.azs, count.index)
-  
+
   tags = merge(
     local.common_tags,
     local.private_subnet_tags,
@@ -87,7 +87,7 @@ resource "aws_subnet" "private" {
 # Internet Gateway
 resource "aws_internet_gateway" "igw" {
   vpc_id = aws_vpc.main.id
-  
+
   tags = merge(
     local.common_tags,
     {
@@ -100,7 +100,7 @@ resource "aws_internet_gateway" "igw" {
 resource "aws_eip" "nat" {
   count  = var.enable_nat_gateway ? local.nat_gateway_count : 0
   domain = "vpc"
-  
+
   tags = merge(
     local.common_tags,
     {
@@ -113,21 +113,21 @@ resource "aws_nat_gateway" "natgw" {
   count         = var.enable_nat_gateway ? local.nat_gateway_count : 0
   allocation_id = aws_eip.nat[count.index].id
   subnet_id     = aws_subnet.public[count.index].id
-  
+
   tags = merge(
     local.common_tags,
     {
       Name = "${var.name}-natgw-${count.index}"
     }
   )
-  
+
   depends_on = [aws_internet_gateway.igw]
 }
 
 # Route Tables
 resource "aws_route_table" "public" {
   vpc_id = aws_vpc.main.id
-  
+
   tags = merge(
     local.common_tags,
     {
@@ -140,7 +140,7 @@ resource "aws_route" "public_internet_gateway" {
   route_table_id         = aws_route_table.public.id
   destination_cidr_block = "0.0.0.0/0"
   gateway_id             = aws_internet_gateway.igw.id
-  
+
   timeouts {
     create = "5m"
   }
@@ -149,7 +149,7 @@ resource "aws_route" "public_internet_gateway" {
 resource "aws_route_table" "private" {
   count  = length(var.private_subnet_cidrs)
   vpc_id = aws_vpc.main.id
-  
+
   tags = merge(
     local.common_tags,
     {
@@ -163,7 +163,7 @@ resource "aws_route" "private_nat_gateway" {
   route_table_id         = aws_route_table.private[count.index].id
   destination_cidr_block = "0.0.0.0/0"
   nat_gateway_id         = var.single_nat_gateway ? aws_nat_gateway.natgw[0].id : aws_nat_gateway.natgw[count.index].id
-  
+
   timeouts {
     create = "5m"
   }
@@ -189,7 +189,7 @@ resource "aws_flow_log" "this" {
   log_destination_type = "s3"
   traffic_type         = "ALL"
   vpc_id               = aws_vpc.main.id
-  
+
   tags = merge(
     local.common_tags,
     {
@@ -205,7 +205,7 @@ resource "aws_vpc_endpoint" "s3" {
   service_name      = "com.amazonaws.${var.region}.s3"
   vpc_endpoint_type = "Gateway"
   route_table_ids   = concat([aws_route_table.public.id], aws_route_table.private[*].id)
-  
+
   tags = merge(
     local.common_tags,
     {
@@ -220,7 +220,7 @@ resource "aws_security_group" "eks_cluster_sg" {
   name        = "${var.name}-eks-cluster-sg"
   description = "Security group for EKS cluster communication"
   vpc_id      = aws_vpc.main.id
-  
+
   dynamic "ingress" {
     for_each = var.eks_security_group_rules
     content {
@@ -231,7 +231,7 @@ resource "aws_security_group" "eks_cluster_sg" {
       cidr_blocks = ingress.value.cidr_blocks
     }
   }
-  
+
   # Allow HTTPS outbound for API calls and updates
   egress {
     description = "Allow HTTPS outbound traffic"
@@ -258,7 +258,7 @@ resource "aws_security_group" "eks_cluster_sg" {
     protocol    = "udp"
     cidr_blocks = ["0.0.0.0/0"]
   }
-  
+
   tags = merge(
     local.common_tags,
     {
@@ -271,19 +271,8 @@ resource "aws_security_group" "eks_cluster_sg" {
 resource "aws_default_security_group" "default" {
   vpc_id = aws_vpc.main.id
 
-  ingress {
-    protocol  = -1
-    self      = true
-    from_port = 0
-    to_port   = 0
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
+  # No ingress rules - deny all inbound traffic
+  # No egress rules - deny all outbound traffic
 
   tags = merge(
     local.common_tags,
