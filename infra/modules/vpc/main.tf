@@ -17,8 +17,8 @@ locals {
 
   # EKS-specific subnet tags
   eks_subnet_tags = {
-    "kubernetes.io/role/elb"           = "1"
-    "kubernetes.io/role/internal-elb"  = "1"
+    "kubernetes.io/role/elb"                    = "1"
+    "kubernetes.io/role/internal-elb"           = "1"
     "kubernetes.io/cluster/${var.cluster_name}" = "shared"
   }
 
