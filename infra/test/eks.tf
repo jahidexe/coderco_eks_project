@@ -23,6 +23,10 @@ module "eks" {
       capacity_type  = "ON_DEMAND"
       ami_type       = "AL2_x86_64"
       disk_size      = 20
+      metadata_options = {
+        http_put_response_hop_limit = 1
+        http_tokens                 = "required"  # Also enabling IMDSv2 for better security
+      }
       labels         = {
         environment = "test"
       }
