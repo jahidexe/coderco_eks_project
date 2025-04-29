@@ -67,13 +67,62 @@ resource "aws_security_group_rule" "cluster_egress" {
   type              = "egress"
 }
 
-resource "aws_security_group_rule" "node_egress" {
+# Node group egress rules with specific protocols and ports
+resource "aws_security_group_rule" "node_egress_https" {
   count = var.create_security_group ? 1 : 0
 
-  description       = "Allow node groups egress access to internet for updates and package installation"
-  protocol          = "-1"
+  description       = "Allow node groups HTTPS egress for ECR and other HTTPS services"
+  protocol          = "tcp"
   security_group_id = aws_security_group.node[0].id
   cidr_blocks       = ["0.0.0.0/0"]
+  from_port         = 443
+  to_port           = 443
+  type              = "egress"
+}
+
+resource "aws_security_group_rule" "node_egress_http" {
+  count = var.create_security_group ? 1 : 0
+
+  description       = "Allow node groups HTTP egress for package updates"
+  protocol          = "tcp"
+  security_group_id = aws_security_group.node[0].id
+  cidr_blocks       = ["0.0.0.0/0"]
+  from_port         = 80
+  to_port           = 80
+  type              = "egress"
+}
+
+resource "aws_security_group_rule" "node_egress_ntp" {
+  count = var.create_security_group ? 1 : 0
+
+  description       = "Allow node groups NTP egress for time synchronization"
+  protocol          = "udp"
+  security_group_id = aws_security_group.node[0].id
+  cidr_blocks       = ["0.0.0.0/0"]
+  from_port         = 123
+  to_port           = 123
+  type              = "egress"
+}
+
+resource "aws_security_group_rule" "node_egress_dns" {
+  count = var.create_security_group ? 1 : 0
+
+  description       = "Allow node groups DNS egress"
+  protocol          = "udp"
+  security_group_id = aws_security_group.node[0].id
+  cidr_blocks       = ["0.0.0.0/0"]
+  from_port         = 53
+  to_port           = 53
+  type              = "egress"
+}
+
+resource "aws_security_group_rule" "node_egress_vpc" {
+  count = var.create_security_group ? 1 : 0
+
+  description       = "Allow node groups egress to VPC CIDR"
+  protocol          = "-1"
+  security_group_id = aws_security_group.node[0].id
+  cidr_blocks       = [var.vpc_cidr]
   from_port         = 0
   to_port           = 0
   type              = "egress"
