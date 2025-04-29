@@ -107,41 +107,25 @@ resource "aws_eks_node_group" "this" {
       Name = "${var.cluster_name}-${each.key}-node-group"
     }
   )
-
-  depends_on = [
-    aws_iam_role_policy_attachment.node_group_policies,
-    aws_iam_role_policy_attachment.node_group_cni_policies,
-    aws_iam_role_policy_attachment.node_group_ecr_policies,
-    aws_launch_template.node_group
-  ]
 }
 
-# Node Group Security Configuration
+# Launch Template for Node Groups
 resource "aws_launch_template" "node_group" {
   for_each = var.managed_node_groups
 
   name_prefix   = "${var.cluster_name}-${each.key}-"
   image_id      = data.aws_ami.eks_optimized[each.key].id
   instance_type = each.value.instance_types[0]
-
-  vpc_security_group_ids = [aws_security_group.node.id]
+  user_data     = base64encode(templatefile("${path.module}/templates/userdata.sh", {
+    cluster_name        = var.cluster_name
+    cluster_endpoint    = aws_eks_cluster.this.endpoint
+    cluster_auth_base64 = aws_eks_cluster.this.certificate_authority[0].data
+  }))
 
   metadata_options {
     http_endpoint               = "enabled"
-    http_tokens                 = "required"  # Enforce IMDSv2
+    http_tokens                 = "required"
     http_put_response_hop_limit = 1
-  }
-
-  block_device_mappings {
-    device_name = "/dev/xvda"
-    ebs {
-      volume_size           = each.value.disk_size
-      volume_type          = "gp3"
-      encrypted            = true
-      delete_on_termination = true
-      iops                 = 3000
-      throughput           = 125
-    }
   }
 
   tag_specifications {
@@ -155,26 +139,16 @@ resource "aws_launch_template" "node_group" {
     )
   }
 
-  tag_specifications {
-    resource_type = "volume"
-    tags = merge(
-      var.tags,
-      each.value.tags,
-      {
-        Name = "${var.cluster_name}-${each.key}-volume"
-      }
-    )
-  }
-
-  user_data = base64encode(templatefile("${path.module}/templates/userdata.sh.tpl", {
-    cluster_name        = var.cluster_name
-    cluster_endpoint    = aws_eks_cluster.this.endpoint
-    cluster_ca          = aws_eks_cluster.this.certificate_authority[0].data
-    bootstrap_extra_args = "--kubelet-extra-args '--node-labels=node.kubernetes.io/instance-type=${each.value.instance_types[0]}'"
-  }))
+  tags = merge(
+    var.tags,
+    each.value.tags,
+    {
+      Name = "${var.cluster_name}-${each.key}-launch-template"
+    }
+  )
 }
 
-# EKS Optimized AMI data source
+# EKS Optimized AMI
 data "aws_ami" "eks_optimized" {
   for_each = var.managed_node_groups
 
@@ -192,21 +166,18 @@ data "aws_ami" "eks_optimized" {
   }
 }
 
-# Fargate Profiles
+# Fargate Profile
 resource "aws_eks_fargate_profile" "this" {
   for_each = var.fargate_profiles
 
   cluster_name           = aws_eks_cluster.this.name
   fargate_profile_name   = each.value.name
   pod_execution_role_arn = aws_iam_role.fargate[each.key].arn
-  subnet_ids            = each.value.subnet_ids
+  subnet_ids            = var.subnet_ids
 
-  dynamic "selector" {
-    for_each = each.value.selectors
-    content {
-      namespace = selector.value.namespace
-      labels    = selector.value.labels
-    }
+  selector {
+    namespace = each.value.namespace
+    labels    = each.value.labels
   }
 
   tags = merge(
@@ -239,6 +210,7 @@ resource "aws_iam_role" "fargate" {
 
   tags = merge(
     var.tags,
+    each.value.tags,
     {
       Name = "${var.cluster_name}-${each.key}-fargate-role"
     }
@@ -251,60 +223,4 @@ resource "aws_iam_role_policy_attachment" "fargate_policies" {
 
   role       = aws_iam_role.fargate[each.key].name
   policy_arn = "arn:aws:iam::aws:policy/AmazonEKSFargatePodExecutionRolePolicy"
-} 
-
-
-# Node Group Security Configuration
-resource "aws_launch_template" "node_group" {
-  for_each = var.managed_node_groups
-
-  name_prefix   = "${var.cluster_name}-${each.key}-"
-  image_id      = data.aws_ami.eks_optimized[each.key].id
-  instance_type = each.value.instance_types[0]
-
-  metadata_options {
-    http_endpoint               = "enabled"
-    http_tokens                 = "required"  # Enforce IMDSv2
-    http_put_response_hop_limit = 1
-  }
-
-  tag_specifications {
-    resource_type = "instance"
-    tags = merge(
-      var.tags,
-      each.value.tags,
-      {
-        Name = "${var.cluster_name}-${each.key}-node"
-      }
-    )
-  }
-
-  tag_specifications {
-    resource_type = "volume"
-    tags = merge(
-      var.tags,
-      each.value.tags,
-      {
-        Name = "${var.cluster_name}-${each.key}-volume"
-      }
-    )
-  }
-}
-
-# EKS Optimized AMI data source
-data "aws_ami" "eks_optimized" {
-  for_each = var.managed_node_groups
-
-  most_recent = true
-  owners      = ["amazon"]
-
-  filter {
-    name   = "name"
-    values = ["amazon-eks-node-${var.kubernetes_version}-*"]
-  }
-
-  filter {
-    name   = "architecture"
-    values = ["x86_64"]
-  }
 }

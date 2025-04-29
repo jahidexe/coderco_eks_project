@@ -112,7 +112,7 @@ variable "eks_security_group_rules" {
 variable "tags" {
   description = "A map of tags to add to all resources"
   type        = map(string)
-  default     = {
+  default = {
     Environment = "test"
     ManagedBy   = "Terraform"
     Project     = "eks-test"

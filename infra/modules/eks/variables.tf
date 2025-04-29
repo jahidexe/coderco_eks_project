@@ -61,8 +61,8 @@ variable "ip_family" {
   }
 }
 
-variable "create_cluster_sg" {
-  description = "Whether to create a security group for the cluster"
+variable "create_cluster_security_group" {
+  description = "Whether to create a security group for the EKS cluster"
   type        = bool
   default     = true
 }
@@ -476,22 +476,21 @@ variable "addon_tags" {
 }
 
 # Security Group Variables
-variable "create_cluster_security_group" {
-  description = "Whether to create a security group for the cluster"
-  type        = bool
-  default     = true
-}
-
 variable "create_node_security_group" {
-  description = "Whether to create a security group for the nodes"
+  description = "Whether to create a security group for the EKS nodes"
   type        = bool
   default     = true
 }
 
 variable "security_group_use_name_prefix" {
-  description = "Whether to use name prefix for security groups"
+  description = "Whether to use a name prefix for the security groups"
   type        = bool
-  default     = false
+  default     = true
+}
+
+variable "vpc_cidr" {
+  description = "The CIDR block for the VPC"
+  type        = string
 }
 
 variable "cluster_security_group_id" {
@@ -510,6 +509,22 @@ variable "maintain_default_security_group_rules" {
   description = "Whether to maintain the default security group rules"
   type        = bool
   default     = true
+}
+
+# Security Group Rule Type Definition
+variable "security_rule" {
+  description = "Type definition for security group rules"
+  type = object({
+    type                    = string
+    protocol               = string
+    from_port              = number
+    to_port                = number
+    description            = string
+    cidr_blocks            = optional(list(string))
+    source_security_group_id = optional(string)
+    self                   = optional(bool)
+  })
+  default = null
 }
 
 variable "cluster_security_group_rules" {

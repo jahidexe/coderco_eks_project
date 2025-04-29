@@ -1,5 +1,5 @@
 ###############################################
-# security.tf - Consolidated EKS Security Configurations
+# security.tf - EKS Security Group Configurations
 ###############################################
 
 data "aws_subnets" "all" {
@@ -10,154 +10,60 @@ data "aws_subnets" "all" {
 }
 
 locals {
-  # Define NACL rules in a structured map for reusability
-  nacl_rules = {
-    ingress = [
-      {
-        rule_no    = 300
-        protocol   = "tcp"
-        action     = "allow"
-        cidr_block = var.vpc_cidr
-        from_port  = 1025
-        to_port    = 65535
-        description = "Allow ephemeral ports ingress from VPC CIDR"
-      },
-      {
-        rule_no    = 200
-        protocol   = "-1"
-        action     = "allow"
-        cidr_block = var.vpc_cidr
-        from_port  = 0
-        to_port    = 0
-        description = "Allow pod-to-pod communication"
-      },
-      {
-        rule_no    = 100
-        protocol   = "tcp"
-        action     = "allow"
-        cidr_block = var.vpc_cidr
-        from_port  = 443
-        to_port    = 443
-        description = "Allow return traffic from established connections"
-      },
-      {
-        rule_no    = 32766
-        protocol   = "-1"
-        action     = "deny"
-        cidr_block = "0.0.0.0/0"
-        from_port  = 0
-        to_port    = 0
-        description = "Deny all other ingress traffic"
-      }
-    ],
-    egress = [
-      {
-        rule_no    = 100
-        protocol   = "tcp"
-        action     = "allow"
-        cidr_block = var.vpc_cidr
-        from_port  = 443
-        to_port    = 443
-        description = "Allow HTTPS egress to VPC CIDR"
-      },
-      {
-        rule_no    = 200
-        protocol   = "udp"
-        action     = "allow"
-        cidr_block = var.vpc_cidr
-        from_port  = 53
-        to_port    = 53
-        description = "Allow DNS egress to VPC CIDR"
-      },
-      {
-        rule_no    = 32766
-        protocol   = "-1"
-        action     = "deny"
-        cidr_block = "0.0.0.0/0"
-        from_port  = 0
-        to_port    = 0
-        description = "Deny all other egress traffic"
-      }
-    ]
-  }
-
-  # Node security group rules
-  node_security_group_rules = var.create_node_security_group ? {
-    ingress_self = {
-      description              = "Allow nodes to communicate with each other"
-      from_port                = 0
-      to_port                  = 0
-      protocol                 = "-1"
-      type                     = "ingress"
-      self                     = true
-    }
-    ingress_cluster = {
-      description              = "Allow worker Kubelets and pods to receive communication from the cluster control plane"
-      from_port                = 1025
-      to_port                  = 65535
-      protocol                 = "tcp"
-      type                     = "ingress"
-      source_security_group_id = aws_security_group.cluster.id
-    }
-    egress_https = {
-      description       = "Allow nodes to communicate with the internet for updates"
-      from_port         = 443
-      to_port           = 443
-      protocol          = "tcp"
-      type              = "egress"
-      cidr_blocks       = [var.vpc_cidr]
-    }
-    egress_dns = {
-      description       = "Allow nodes to communicate with DNS"
-      from_port         = 53
-      to_port           = 53
-      protocol          = "udp"
-      type              = "egress"
-      cidr_blocks       = [var.vpc_cidr]
-    }
-  } : {}
-
-  # Cluster security group rules
-  cluster_security_group_rules = var.create_cluster_security_group ? {
-    ingress_https = {
-      description = "Allow HTTPS inbound traffic"
-      from_port   = 443
-      to_port     = 443
-      protocol    = "tcp"
-      type        = "ingress"
-      cidr_blocks = [var.vpc_cidr]
-    }
-    egress_https = {
-      description = "Allow HTTPS outbound traffic"
-      from_port   = 443
-      to_port     = 443
-      protocol    = "tcp"
-      type        = "egress"
-      cidr_blocks = ["0.0.0.0/0"]
-    }
-    egress_dns = {
-      description = "Allow DNS outbound traffic"
-      from_port   = 53
-      to_port     = 53
-      protocol    = "udp"
-      type        = "egress"
-      cidr_blocks = ["0.0.0.0/0"]
-    }
-    egress_ntp = {
-      description = "Allow NTP outbound traffic"
-      from_port   = 123
-      to_port     = 123
-      protocol    = "udp"
-      type        = "egress"
-      cidr_blocks = ["0.0.0.0/0"]
-    }
-  } : {}
-
   # Use dynamic fallback to cover all subnets if none explicitly passed
   subnet_ids = length(var.subnet_ids) > 0 ? var.subnet_ids : data.aws_subnets.all.ids
-
-  # Create node security group name
-  node_security_group_name = "${var.cluster_name}-node-sg"
 }
 
-# ... (Rest of your security.tf remains unchanged)
+# EKS Cluster Security Group
+resource "aws_security_group" "cluster" {
+  count = var.create_cluster_security_group ? 1 : 0
+
+  name        = local.names.cluster_sg
+  description = "Security group for EKS cluster ${var.cluster_name}"
+  vpc_id      = var.vpc_id
+
+  tags = local.resource_tags["cluster_sg"]
+}
+
+# Node Security Group
+resource "aws_security_group" "node" {
+  count = var.create_node_security_group ? 1 : 0
+
+  name        = local.names.node_sg
+  description = "Security group for EKS nodes"
+  vpc_id      = var.vpc_id
+
+  tags = local.resource_tags["node_sg"]
+}
+
+# Cluster Security Group Rules
+resource "aws_security_group_rule" "cluster" {
+  for_each = var.create_cluster_security_group ? local.security_rules.cluster : {}
+
+  security_group_id = aws_security_group.cluster[0].id
+  type              = each.value.type
+  protocol          = each.value.protocol
+  from_port         = each.value.from_port
+  to_port           = each.value.to_port
+  cidr_blocks       = lookup(each.value, "cidr_blocks", null)
+  self              = lookup(each.value, "self", null)
+  source_security_group_id = lookup(each.value, "source_security_group_id", null)
+
+  description = each.value.description
+}
+
+# Node Security Group Rules
+resource "aws_security_group_rule" "node" {
+  for_each = var.create_node_security_group ? local.security_rules.nodes : {}
+
+  security_group_id = aws_security_group.node[0].id
+  type              = each.value.type
+  protocol          = each.value.protocol
+  from_port         = each.value.from_port
+  to_port           = each.value.to_port
+  cidr_blocks       = lookup(each.value, "cidr_blocks", null)
+  self              = lookup(each.value, "self", null)
+  source_security_group_id = lookup(each.value, "source_security_group_id", null)
+
+  description = each.value.description
+}
