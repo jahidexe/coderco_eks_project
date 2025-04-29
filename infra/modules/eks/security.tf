@@ -16,54 +16,82 @@ locals {
 
 # EKS Cluster Security Group
 resource "aws_security_group" "cluster" {
-  count = var.create_cluster_security_group ? 1 : 0
+  count = var.create_security_group ? 1 : 0
 
-  name        = local.names.cluster_sg
-  description = "Security group for EKS cluster ${var.cluster_name}"
+  name_prefix = "${local.names.cluster_sg}-"
+  description = "EKS cluster security group with managed rules for cluster ${var.cluster_name}"
   vpc_id      = var.vpc_id
 
-  tags = local.resource_tags["cluster_sg"]
+  tags = merge(
+    local.resource_tags["cluster_sg"],
+    {
+      "kubernetes.io/cluster/${var.cluster_name}" = "owned"
+    }
+  )
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 # Node Security Group
 resource "aws_security_group" "node" {
-  count = var.create_node_security_group ? 1 : 0
+  count = var.create_security_group ? 1 : 0
 
-  name        = local.names.node_sg
-  description = "Security group for EKS nodes"
+  name_prefix = "${local.names.node_sg}-"
+  description = "EKS node security group with managed rules for cluster ${var.cluster_name}"
   vpc_id      = var.vpc_id
 
-  tags = local.resource_tags["node_sg"]
+  tags = merge(
+    local.resource_tags["node_sg"],
+    {
+      "kubernetes.io/cluster/${var.cluster_name}" = "owned"
+    }
+  )
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
-# Cluster Security Group Rules
-resource "aws_security_group_rule" "cluster" {
-  for_each = var.create_cluster_security_group ? local.security_rules.cluster : {}
+# Add specific ingress/egress rules with proper descriptions
+resource "aws_security_group_rule" "cluster_egress" {
+  count = var.create_security_group ? 1 : 0
 
-  security_group_id        = aws_security_group.cluster[0].id
-  type                     = each.value.type
-  protocol                 = each.value.protocol
-  from_port                = each.value.from_port
-  to_port                  = each.value.to_port
-  cidr_blocks              = lookup(each.value, "cidr_blocks", null)
-  self                     = lookup(each.value, "self", null)
-  source_security_group_id = lookup(each.value, "source_security_group_id", null)
-
-  description = each.value.description
+  description       = "Allow cluster egress access to node groups and endpoints"
+  protocol         = "-1"
+  security_group_id = aws_security_group.cluster[0].id
+  cidr_blocks      = [var.vpc_cidr]
+  from_port        = 0
+  to_port          = 0
+  type             = "egress"
 }
 
-# Node Security Group Rules
-resource "aws_security_group_rule" "node" {
-  for_each = var.create_node_security_group ? local.security_rules.nodes : {}
+resource "aws_security_group_rule" "node_egress" {
+  count = var.create_security_group ? 1 : 0
 
-  security_group_id        = aws_security_group.node[0].id
-  type                     = each.value.type
-  protocol                 = each.value.protocol
-  from_port                = each.value.from_port
-  to_port                  = each.value.to_port
-  cidr_blocks              = lookup(each.value, "cidr_blocks", null)
-  self                     = lookup(each.value, "self", null)
-  source_security_group_id = lookup(each.value, "source_security_group_id", null)
+  description       = "Allow node groups egress access to internet for updates and package installation"
+  protocol         = "-1"
+  security_group_id = aws_security_group.node[0].id
+  cidr_blocks      = ["0.0.0.0/0"]
+  from_port        = 0
+  to_port          = 0
+  type             = "egress"
+}
 
-  description = each.value.description
+# Add other security group rules from locals with proper descriptions
+dynamic "aws_security_group_rule" "cluster_rules" {
+  for_each = local.cluster_security_group_rules
+
+  content {
+    security_group_id = aws_security_group.cluster[0].id
+    description       = each.value.description
+    type             = each.value.type
+    from_port        = each.value.from_port
+    to_port          = each.value.to_port
+    protocol         = each.value.protocol
+    cidr_blocks      = try(each.value.cidr_blocks, null)
+    source_security_group_id = try(each.value.source_security_group_id, null)
+    self             = try(each.value.self, null)
+  }
 }

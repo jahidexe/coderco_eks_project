@@ -6,7 +6,83 @@ resource "aws_kms_key" "cluster" {
   description             = "KMS key for EKS cluster ${var.cluster_name} encryption"
   deletion_window_in_days = var.kms_key_deletion_window
   enable_key_rotation     = true
-  tags                    = local.resource_tags["kms_key"]
+  multi_region           = false
+  
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Id      = "${var.cluster_name}-key-policy"
+    Statement = [
+      {
+        Sid    = "Enable IAM User Permissions"
+        Effect = "Allow"
+        Principal = {
+          AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
+        }
+        Action   = "kms:*"
+        Resource = "*"
+      },
+      {
+        Sid    = "Allow EKS Service"
+        Effect = "Allow"
+        Principal = {
+          AWS = aws_iam_role.cluster.arn
+        }
+        Action = [
+          "kms:Encrypt",
+          "kms:Decrypt",
+          "kms:ReEncrypt*",
+          "kms:GenerateDataKey*",
+          "kms:DescribeKey"
+        ]
+        Resource = "*"
+      },
+      {
+        Sid    = "Allow CloudWatch Logs"
+        Effect = "Allow"
+        Principal = {
+          Service = "logs.${var.region}.amazonaws.com"
+        }
+        Action = [
+          "kms:Encrypt*",
+          "kms:Decrypt*",
+          "kms:ReEncrypt*",
+          "kms:GenerateDataKey*",
+          "kms:Describe*"
+        ]
+        Resource = "*"
+        Condition = {
+          ArnLike = {
+            "kms:EncryptionContext:aws:logs:arn": "arn:aws:logs:${var.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/eks/${var.cluster_name}/*"
+          }
+        }
+      },
+      {
+        Sid    = "Allow Node Groups"
+        Effect = "Allow"
+        Principal = {
+          AWS = concat(
+            [for ng in aws_iam_role.node_group : ng.arn],
+            [aws_iam_role.cluster.arn]
+          )
+        }
+        Action = [
+          "kms:Decrypt",
+          "kms:DescribeKey",
+          "kms:Encrypt",
+          "kms:GenerateDataKey*",
+          "kms:ReEncrypt*"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+
+  tags = merge(
+    local.resource_tags["kms_key"],
+    {
+      "kubernetes.io/cluster/${var.cluster_name}" = "owned"
+    }
+  )
 }
 
 resource "aws_kms_alias" "cluster" {
@@ -59,8 +135,14 @@ resource "aws_eks_cluster" "this" {
 resource "aws_cloudwatch_log_group" "eks_logs" {
   count             = length(var.enabled_cluster_log_types) > 0 ? 1 : 0
   name              = local.names.log_group
-  retention_in_days = var.log_retention_days
-  tags              = local.resource_tags["log_group"]
+  retention_in_days = max(var.log_retention_days, 365) # Ensure minimum 1 year retention
+  kms_key_id        = aws_kms_key.cluster.arn
+  tags              = merge(
+    local.resource_tags["log_group"],
+    {
+      "kubernetes.io/cluster/${var.cluster_name}" = "owned"
+    }
+  )
 }
 
 # Access Entries

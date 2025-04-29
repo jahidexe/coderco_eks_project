@@ -181,86 +181,75 @@ resource "aws_iam_policy" "node_group" {
       {
         Effect = "Allow"
         Action = [
-          # EC2 instance management
           "ec2:DescribeInstances",
           "ec2:DescribeNetworkInterfaces",
-          "ec2:DescribeTags",
-          "ec2:DescribeVolumes",
-          "ec2:CreateTags",
-          "ec2:DeleteTags",
-          "ec2:AttachVolume",
-          "ec2:DetachVolume",
-          "ec2:DescribeVolumeStatus",
-          "ec2:DescribeVolumesModifications",
-          "ec2:ModifyVolume",
-          "ec2:DescribeInstanceTypes",
-
-          # Load balancing
-          "elasticloadbalancing:DescribeLoadBalancers",
-          "elasticloadbalancing:DescribeLoadBalancerAttributes",
-          "elasticloadbalancing:DescribeTargetGroups",
-          "elasticloadbalancing:DescribeTargetGroupAttributes",
-          "elasticloadbalancing:DescribeTargetHealth",
-
-          # ACM certificates
-          "acm:DescribeCertificate",
-          "acm:ListCertificates",
-
-          # Autoscaling
-          "autoscaling:DescribeAutoScalingGroups",
-          "autoscaling:DescribeAutoScalingInstances",
-          "autoscaling:DescribeLaunchConfigurations",
-          "autoscaling:DescribeTags",
-
-          # IAM for service accounts
-          "iam:GetRole",
-          "iam:ListAttachedRolePolicies",
-
-          # CloudWatch logging
-          "logs:CreateLogStream",
-          "logs:PutLogEvents",
-          "logs:DescribeLogGroups",
-          "logs:DescribeLogStreams",
-
-          # Secret access for pulling private images
-          "secretsmanager:GetSecretValue",
-          "secretsmanager:DescribeSecret",
-
-          # KMS for volume encryption/decryption
-          "kms:Decrypt",
-          "kms:DescribeKey",
-          "kms:GenerateDataKeyWithoutPlaintext"
-        ],
-        Resource = "*"
-      },
-      {
-        # S3 access with more limited scope for specific buckets
-        Effect = "Allow",
-        Action = [
-          "s3:GetObject",
-          "s3:ListBucket",
-          "s3:GetBucketLocation"
-        ],
-        Resource = [
-          "arn:aws:s3:::${var.cluster_name}-*",
-          "arn:aws:s3:::${var.cluster_name}-*/*",
-          "arn:aws:s3:::eks-*",
-          "arn:aws:s3:::eks-*/*"
+          "ec2:DescribeTags"
         ]
-      },
-      {
-        # STS permissions for AssumeRole
-        Effect = "Allow",
-        Action = [
-          "sts:AssumeRole",
-          "sts:GetServiceBearerToken"
-        ],
-        Resource = "*",
+        Resource = "*"
         Condition = {
           StringEquals = {
-            "aws:ResourceAccount" : "${data.aws_caller_identity.current.account_id}"
+            "aws:RequestedRegion": var.region,
+            "aws:ResourceTag/kubernetes.io/cluster/${var.cluster_name}": "owned"
           }
         }
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "ec2:CreateTags",
+          "ec2:DeleteTags"
+        ]
+        Resource = [
+          "arn:aws:ec2:${var.region}:${data.aws_caller_identity.current.account_id}:instance/*",
+          "arn:aws:ec2:${var.region}:${data.aws_caller_identity.current.account_id}:volume/*"
+        ]
+        Condition = {
+          StringEquals = {
+            "aws:RequestedRegion": var.region,
+            "aws:ResourceTag/kubernetes.io/cluster/${var.cluster_name}": "owned"
+          }
+        }
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "ec2:AttachVolume",
+          "ec2:DetachVolume"
+        ]
+        Resource = [
+          "arn:aws:ec2:${var.region}:${data.aws_caller_identity.current.account_id}:instance/*",
+          "arn:aws:ec2:${var.region}:${data.aws_caller_identity.current.account_id}:volume/*"
+        ]
+        Condition = {
+          StringEquals = {
+            "aws:RequestedRegion": var.region,
+            "aws:ResourceTag/kubernetes.io/cluster/${var.cluster_name}": "owned"
+          }
+        }
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ]
+        Resource = "arn:aws:logs:${var.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/eks/${var.cluster_name}/*:*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "logs:DescribeLogGroups",
+          "logs:DescribeLogStreams"
+        ]
+        Resource = "arn:aws:logs:${var.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/eks/${var.cluster_name}:*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "kms:Decrypt",
+          "kms:GenerateDataKey"
+        ]
+        Resource = aws_kms_key.cluster.arn
       }
     ]
   })

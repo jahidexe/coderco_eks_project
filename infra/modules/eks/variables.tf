@@ -80,9 +80,14 @@ variable "enabled_cluster_log_types" {
 }
 
 variable "log_retention_days" {
-  description = "Number of days to retain EKS logs in CloudWatch"
+  description = "Number of days to retain EKS logs in CloudWatch (minimum 365 days for compliance)"
   type        = number
-  default     = 90
+  default     = 365
+
+  validation {
+    condition     = var.log_retention_days >= 365
+    error_message = "Log retention period must be at least 365 days (1 year) for compliance."
+  }
 }
 
 variable "kms_key_arn" {
