@@ -1,5 +1,5 @@
 module "vpc" {
-  source = "git::https://github.com/terraform-aws-modules/terraform-aws-vpc.git?ref=5f5df57" 
+  source = "git::https://github.com/terraform-aws-modules/terraform-aws-vpc.git?ref=5f5df57"
 
   name = "test-vpc"
   cidr = "10.0.0.0/16"
