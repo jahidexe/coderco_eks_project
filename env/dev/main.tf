@@ -1,5 +1,5 @@
 module "vpc" {
-  source = "git::https://github.com/terraform-aws-modules/terraform-aws-vpc.git?ref=5f5df57"
+  source = "git::https://github.com/terraform-aws-modules/terraform-aws-vpc.git?ref=5f5df57" # v5.5.2
 
   name = "test-vpc"
   cidr = "10.0.0.0/16"
@@ -41,6 +41,8 @@ module "vpc" {
     Environment = "Test"
     Project     = "Terraform VPC"
   }
+
+  vpc_security_group_ids = var.create_security_group ? [aws_security_group.node[0].id] : []
 }
 
 variable "map_public_ip_on_launch" {

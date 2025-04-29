@@ -21,12 +21,7 @@ resource "aws_iam_role" "node_group" {
     ]
   })
 
-  tags = merge(
-    var.tags,
-    {
-      Name = "${var.cluster_name}-${each.key}-node-group-role"
-    }
-  )
+  tags = local.tags
 }
 
 # Node Group IAM Policy Attachments
@@ -100,13 +95,7 @@ resource "aws_eks_node_group" "this" {
     create_before_destroy = true
   }
 
-  tags = merge(
-    var.tags,
-    each.value.tags,
-    {
-      Name = "${var.cluster_name}-${each.key}-node-group"
-    }
-  )
+  tags = local.tags
 }
 
 # Launch Template for Node Groups
@@ -122,6 +111,8 @@ resource "aws_launch_template" "node_group" {
     cluster_auth_base64 = aws_eks_cluster.this.certificate_authority[0].data
   }))
 
+  vpc_security_group_ids = var.create_security_group ? [aws_security_group.node[0].id] : []
+
   metadata_options {
     http_endpoint               = "enabled"
     http_tokens                 = "required"
@@ -135,6 +126,17 @@ resource "aws_launch_template" "node_group" {
       each.value.tags,
       {
         Name = "${var.cluster_name}-${each.key}-node"
+      }
+    )
+  }
+
+  tag_specifications {
+    resource_type = "volume"
+    tags = merge(
+      var.tags,
+      each.value.tags,
+      {
+        Name = "${var.cluster_name}-${each.key}-volume"
       }
     )
   }
@@ -180,13 +182,7 @@ resource "aws_eks_fargate_profile" "this" {
     labels    = each.value.labels
   }
 
-  tags = merge(
-    var.tags,
-    each.value.tags,
-    {
-      Name = "${var.cluster_name}-${each.key}-fargate-profile"
-    }
-  )
+  tags = local.tags
 }
 
 # Fargate IAM Role
@@ -208,13 +204,7 @@ resource "aws_iam_role" "fargate" {
     ]
   })
 
-  tags = merge(
-    var.tags,
-    each.value.tags,
-    {
-      Name = "${var.cluster_name}-${each.key}-fargate-role"
-    }
-  )
+  tags = local.tags
 }
 
 # Fargate IAM Policy Attachments
