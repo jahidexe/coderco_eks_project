@@ -188,8 +188,8 @@ resource "aws_iam_policy" "node_group" {
         Resource = "*"
         Condition = {
           StringEquals = {
-            "aws:RequestedRegion": var.region,
-            "aws:ResourceTag/kubernetes.io/cluster/${var.cluster_name}": "owned"
+            "aws:RequestedRegion" : var.region,
+            "aws:ResourceTag/kubernetes.io/cluster/${var.cluster_name}" : "owned"
           }
         }
       },
@@ -205,8 +205,8 @@ resource "aws_iam_policy" "node_group" {
         ]
         Condition = {
           StringEquals = {
-            "aws:RequestedRegion": var.region,
-            "aws:ResourceTag/kubernetes.io/cluster/${var.cluster_name}": "owned"
+            "aws:RequestedRegion" : var.region,
+            "aws:ResourceTag/kubernetes.io/cluster/${var.cluster_name}" : "owned"
           }
         }
       },
@@ -222,8 +222,8 @@ resource "aws_iam_policy" "node_group" {
         ]
         Condition = {
           StringEquals = {
-            "aws:RequestedRegion": var.region,
-            "aws:ResourceTag/kubernetes.io/cluster/${var.cluster_name}": "owned"
+            "aws:RequestedRegion" : var.region,
+            "aws:ResourceTag/kubernetes.io/cluster/${var.cluster_name}" : "owned"
           }
         }
       },

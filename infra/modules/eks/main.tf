@@ -6,8 +6,8 @@ resource "aws_kms_key" "cluster" {
   description             = "KMS key for EKS cluster ${var.cluster_name} encryption"
   deletion_window_in_days = var.kms_key_deletion_window
   enable_key_rotation     = true
-  multi_region           = false
-  
+  multi_region            = false
+
   policy = jsonencode({
     Version = "2012-10-17"
     Id      = "${var.cluster_name}-key-policy"
@@ -52,7 +52,7 @@ resource "aws_kms_key" "cluster" {
         Resource = "*"
         Condition = {
           ArnLike = {
-            "kms:EncryptionContext:aws:logs:arn": "arn:aws:logs:${var.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/eks/${var.cluster_name}/*"
+            "kms:EncryptionContext:aws:logs:arn" : "arn:aws:logs:${var.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/eks/${var.cluster_name}/*"
           }
         }
       },
@@ -137,7 +137,7 @@ resource "aws_cloudwatch_log_group" "eks_logs" {
   name              = local.names.log_group
   retention_in_days = max(var.log_retention_days, 365) # Ensure minimum 1 year retention
   kms_key_id        = aws_kms_key.cluster.arn
-  tags              = merge(
+  tags = merge(
     local.resource_tags["log_group"],
     {
       "kubernetes.io/cluster/${var.cluster_name}" = "owned"

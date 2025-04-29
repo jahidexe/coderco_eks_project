@@ -1,6 +1,6 @@
 module "vpc" {
-source = "git::https://github.com/terraform-aws-modules/terraform-aws-vpc.git?ref=4acfb2d6f1a1f1e1ea41bd9cc26fe7b7fc35f7c2"  # v5.5.2
-  
+  source = "git::https://github.com/terraform-aws-modules/terraform-aws-vpc.git?ref=4acfb2d6f1a1f1e1ea41bd9cc26fe7b7fc35f7c2" # v5.5.2
+
   name = "test-vpc"
   cidr = "10.0.0.0/16"
 
@@ -20,11 +20,11 @@ source = "git::https://github.com/terraform-aws-modules/terraform-aws-vpc.git?re
   create_flow_log_cloudwatch_iam_role  = true
   flow_log_max_aggregation_interval    = 60
 
-  manage_default_network_acl    = true
-  manage_default_route_table    = true
-  manage_default_security_group = true
+  manage_default_network_acl     = true
+  manage_default_route_table     = true
+  manage_default_security_group  = true
   default_security_group_ingress = []
-  default_security_group_egress = []
+  default_security_group_egress  = []
 
   map_public_ip_on_launch = false
 
