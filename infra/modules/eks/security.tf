@@ -274,12 +274,11 @@ resource "aws_security_group_rule" "cluster_egress_dns" {
 # Network ACL with explicit subnet associations
 resource "aws_network_acl" "eks" {
   vpc_id     = var.vpc_id
-  subnet_ids = local.subnet_ids  # Explicitly associate all subnets with NACL
+  subnet_ids = var.subnet_ids  # Explicitly attach to all provided subnets
 
   # Generate ingress rules dynamically
   dynamic "ingress" {
     for_each = local.nacl_rules.ingress
-    
     content {
       protocol   = ingress.value.protocol
       rule_no    = ingress.value.rule_no
@@ -293,7 +292,6 @@ resource "aws_network_acl" "eks" {
   # Generate egress rules dynamically
   dynamic "egress" {
     for_each = local.nacl_rules.egress
-    
     content {
       protocol   = egress.value.protocol
       rule_no    = egress.value.rule_no
@@ -315,30 +313,33 @@ resource "aws_network_acl" "eks" {
   }
 }
 
-# Default Security Group (lock down default SG)
-resource "aws_default_security_group" "default" {
-  vpc_id = var.vpc_id  # Use the variable instead of aws_vpc.main.id
+# Explicit NACL associations to ensure subnets are attached
+resource "aws_network_acl_association" "eks" {
+  count          = length(var.subnet_ids)
+  network_acl_id = aws_network_acl.eks.id
+  subnet_id      = var.subnet_ids[count.index]
+}
 
-  # Block all ingress traffic
+# Default Security Group (updated to align with AWS best practices)
+resource "aws_default_security_group" "default" {
+  vpc_id = var.vpc_id
+
+  # Allow inbound traffic only from resources in the same security group
   ingress {
-    protocol         = "-1"
-    self             = false
-    from_port        = 0
-    to_port          = 0
-    cidr_blocks      = []
-    ipv6_cidr_blocks = []
-    prefix_list_ids  = []
+    description = "Allow inbound traffic from resources in the same security group"
+    protocol    = "-1"
+    from_port   = 0
+    to_port     = 0
+    self        = true
   }
 
-  # Block all egress traffic
+  # Allow all outbound traffic (AWS default behavior)
   egress {
-    protocol         = "-1"
-    from_port        = 0
-    to_port          = 0
-    cidr_blocks      = []
-    ipv6_cidr_blocks = []
-    prefix_list_ids  = []
-    self             = false
+    description = "Allow all outbound traffic"
+    protocol    = "-1"
+    from_port   = 0
+    to_port     = 0
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   tags = merge(
