@@ -12,10 +12,10 @@ module "vpc" {
   enable_dns_support   = var.enable_dns_support
   enable_dns_hostnames = var.enable_dns_hostnames
 
-  # Subnet settings - Single AZ for testing
-  public_subnet_cidrs     = ["10.0.1.0/24"]  # Single public subnet
-  private_subnet_cidrs    = ["10.0.101.0/24"] # Single private subnet
-  azs                     = [var.region]      # Use the same region as AZ
+  # Subnet settings - Two AZs for EKS requirements
+  public_subnet_cidrs     = ["10.0.1.0/24", "10.0.2.0/24"]    # Two public subnets
+  private_subnet_cidrs    = ["10.0.101.0/24", "10.0.102.0/24"] # Two private subnets
+  azs                     = ["eu-west-1a", "eu-west-1b"]       # Two AZs
   map_public_ip_on_launch = var.map_public_ip_on_launch
 
   # NAT Gateway settings - Single NAT for testing

@@ -7,7 +7,7 @@ module "eks" {
 
   # Cluster Configuration
   cluster_name       = "test-eks-cluster"
-  kubernetes_version = "1.24"
+  kubernetes_version = "1.28"
   vpc_id             = module.vpc.vpc_id
   subnet_ids         = concat(module.vpc.private_subnet_ids, module.vpc.public_subnet_ids)
   region             = var.region
@@ -60,7 +60,7 @@ module "eks" {
   enable_cloudwatch_metrics = false
   enable_cloudwatch_logs    = false
 
-  # Additional Security Group Rules
+  # Additional Security Group Rules - Simplified to avoid duplicates
   node_security_group_additional_rules = {
     ingress_self_all = {
       description = "Node to node all ports/protocols"
@@ -69,14 +69,6 @@ module "eks" {
       to_port     = 0
       type        = "ingress"
       cidr_blocks = [module.vpc.vpc_cidr_block]
-    }
-    egress_all = {
-      description = "Node all egress"
-      protocol    = "-1"
-      from_port   = 0
-      to_port     = 0
-      type        = "egress"
-      cidr_blocks = ["0.0.0.0/0"]
     }
   }
 

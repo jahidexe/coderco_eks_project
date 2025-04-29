@@ -173,19 +173,19 @@ variable "fargate_profiles" {
 
 # Add-ons Variables
 variable "enable_vpc_cni" {
-  description = "Whether to enable the VPC CNI add-on"
+  description = "Enable VPC CNI add-on"
   type        = bool
   default     = true
 }
 
 variable "enable_coredns" {
-  description = "Whether to enable the CoreDNS add-on"
+  description = "Enable CoreDNS add-on"
   type        = bool
   default     = true
 }
 
 variable "enable_kube_proxy" {
-  description = "Whether to enable the kube-proxy add-on"
+  description = "Enable kube-proxy add-on"
   type        = bool
   default     = true
 }
@@ -197,7 +197,7 @@ variable "enable_aws_load_balancer_controller" {
 }
 
 variable "enable_ebs_csi_driver" {
-  description = "Whether to enable the EBS CSI Driver"
+  description = "Enable EBS CSI Driver add-on"
   type        = bool
   default     = true
 }
@@ -280,4 +280,190 @@ variable "enable_irsa" {
 variable "region" {
   description = "AWS region"
   type        = string
+}
+
+# Access Entries Variables
+variable "access_entries" {
+  description = "Map of EKS cluster access entries defining which IAM principals can access the cluster and their permissions"
+  type = map(object({
+    principal_arn     = string  # The IAM ARN of the user or role
+    kubernetes_groups = optional(list(string))  # Kubernetes RBAC groups
+    type              = optional(string, "STANDARD")  # Access entry type
+    policy_associations = map(object({
+      policy_arn = string  # EKS access policy ARN to associate
+      access_scope = object({
+        type       = string        # "cluster" or "namespace" 
+        namespaces = optional(list(string))  # Required if type is "namespace"
+      })
+    }))
+  }))
+  default = {}
+
+  validation {
+    condition     = length(var.access_entries) > 0
+    error_message = "At least one access entry must be provided for the cluster."
+  }
+
+  validation {
+    condition = alltrue([
+      for entry in var.access_entries : contains(["STANDARD", "FARGATE_LINUX", "EC2_LINUX", "EC2_WINDOWS"], entry.type)
+    ])
+    error_message = "Access entry type must be one of: STANDARD, FARGATE_LINUX, EC2_LINUX, EC2_WINDOWS"
+  }
+
+  validation {
+    condition = alltrue([
+      for entry in var.access_entries : alltrue([
+        for assoc in entry.policy_associations : contains(["cluster", "namespace"], assoc.access_scope.type)
+      ])
+    ])
+    error_message = "Access scope type must be either 'cluster' or 'namespace'"
+  }
+
+  validation {
+    condition = alltrue([
+      for entry in var.access_entries : alltrue([
+        for assoc in entry.policy_associations : 
+          assoc.access_scope.type != "namespace" || length(assoc.access_scope.namespaces) > 0
+      ])
+    ])
+    error_message = "Namespaces must be specified when access scope type is 'namespace'"
+  }
+}
+
+variable "disable_bootstrap_creator_admin" {
+  description = "Disable bootstrap cluster creator admin permissions"
+  type        = bool
+  default     = true
+}
+
+variable "addon_version_preferences" {
+  description = "Version preferences for EKS add-ons"
+  type = object({
+    vpc_cni   = string
+    coredns   = string
+    kube_proxy = string
+    ebs_csi   = string
+  })
+  default = {
+    vpc_cni   = "latest"
+    coredns   = "latest"
+    kube_proxy = "latest"
+    ebs_csi   = "latest"
+  }
+}
+
+variable "addon_configurations" {
+  description = "Configuration values for EKS add-ons"
+  type = object({
+    vpc_cni = map(string)
+    coredns = map(string)
+    kube_proxy = map(string)
+    ebs_csi = map(string)
+  })
+  default = {
+    vpc_cni   = {}
+    coredns   = {}
+    kube_proxy = {}
+    ebs_csi   = {}
+  }
+}
+
+variable "addon_conflict_resolution" {
+  description = "Conflict resolution strategy for add-ons"
+  type = object({
+    on_create = string
+    on_update = string
+  })
+  default = {
+    on_create = "OVERWRITE"
+    on_update = "OVERWRITE"
+  }
+}
+
+variable "addon_timeouts" {
+  description = "Timeout configuration for add-on operations"
+  type = object({
+    create = string
+    update = string
+    delete = string
+  })
+  default = {
+    create = "20m"
+    update = "20m"
+    delete = "20m"
+  }
+}
+
+variable "addon_tags" {
+  description = "Additional tags to apply to add-ons"
+  type        = map(string)
+  default     = {}
+}
+
+# Security Group Variables
+variable "create_cluster_security_group" {
+  description = "Whether to create a security group for the cluster"
+  type        = bool
+  default     = true
+}
+
+variable "create_node_security_group" {
+  description = "Whether to create a security group for the nodes"
+  type        = bool
+  default     = true
+}
+
+variable "security_group_use_name_prefix" {
+  description = "Whether to use name prefix for security groups"
+  type        = bool
+  default     = false
+}
+
+variable "cluster_security_group_id" {
+  description = "Existing security group ID to use for the cluster"
+  type        = string
+  default     = ""
+}
+
+variable "node_security_group_id" {
+  description = "Existing security group ID to use for the nodes"
+  type        = string
+  default     = ""
+}
+
+variable "maintain_default_security_group_rules" {
+  description = "Whether to maintain the default security group rules"
+  type        = bool
+  default     = true
+}
+
+variable "cluster_security_group_rules" {
+  description = "Additional security group rules for the cluster"
+  type = map(object({
+    description              = string
+    protocol                = string
+    from_port               = number
+    to_port                 = number
+    type                    = string
+    cidr_blocks             = optional(list(string))
+    source_security_group_id = optional(string)
+    self                    = optional(bool)
+  }))
+  default = {}
+}
+
+variable "node_security_group_rules" {
+  description = "Additional security group rules for the nodes"
+  type = map(object({
+    description              = string
+    protocol                = string
+    from_port               = number
+    to_port                 = number
+    type                    = string
+    cidr_blocks             = optional(list(string))
+    source_security_group_id = optional(string)
+    self                    = optional(bool)
+  }))
+  default = {}
 }

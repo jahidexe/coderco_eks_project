@@ -106,29 +106,50 @@ output "fargate_role_arns" {
 }
 
 # Add-ons Outputs
-output "vpc_cni_addon_arn" {
-  description = "ARN of the VPC CNI add-on"
-  value       = var.enable_vpc_cni ? aws_eks_addon.vpc_cni[0].arn : null
+output "vpc_cni_addon" {
+  description = "VPC CNI add-on details"
+  value = var.enable_vpc_cni ? {
+    arn     = aws_eks_addon.vpc_cni[0].arn
+    version = aws_eks_addon.vpc_cni[0].addon_version
+    status  = aws_eks_addon.vpc_cni[0].status
+  } : null
 }
 
-output "coredns_addon_arn" {
-  description = "ARN of the CoreDNS add-on"
-  value       = var.enable_coredns ? aws_eks_addon.coredns[0].arn : null
+output "coredns_addon" {
+  description = "CoreDNS add-on details"
+  value = var.enable_coredns ? {
+    arn     = aws_eks_addon.coredns[0].arn
+    version = aws_eks_addon.coredns[0].addon_version
+    status  = aws_eks_addon.coredns[0].status
+  } : null
 }
 
-output "kube_proxy_addon_arn" {
-  description = "ARN of the kube-proxy add-on"
-  value       = var.enable_kube_proxy ? aws_eks_addon.kube_proxy[0].arn : null
+output "kube_proxy_addon" {
+  description = "kube-proxy add-on details"
+  value = var.enable_kube_proxy ? {
+    arn     = aws_eks_addon.kube_proxy[0].arn
+    version = aws_eks_addon.kube_proxy[0].addon_version
+    status  = aws_eks_addon.kube_proxy[0].status
+  } : null
 }
 
-output "aws_load_balancer_controller_role_arn" {
-  description = "ARN of the AWS Load Balancer Controller IAM role"
-  value       = var.enable_aws_load_balancer_controller ? aws_iam_role.aws_load_balancer_controller[0].arn : null
+output "ebs_csi_addon" {
+  description = "EBS CSI Driver add-on details"
+  value = var.enable_ebs_csi_driver ? {
+    arn     = aws_eks_addon.ebs_csi[0].arn
+    version = aws_eks_addon.ebs_csi[0].addon_version
+    status  = aws_eks_addon.ebs_csi[0].status
+  } : null
 }
 
-output "ebs_csi_driver_role_arn" {
-  description = "ARN of the EBS CSI Driver IAM role"
-  value       = var.enable_ebs_csi_driver ? aws_iam_role.ebs_csi_driver[0].arn : null
+output "addon_versions" {
+  description = "Available add-on versions for the cluster"
+  value = {
+    vpc_cni   = var.enable_vpc_cni ? data.aws_eks_addon_version.vpc_cni[0].version : null
+    coredns   = var.enable_coredns ? data.aws_eks_addon_version.coredns[0].version : null
+    kube_proxy = var.enable_kube_proxy ? data.aws_eks_addon_version.kube_proxy[0].version : null
+    ebs_csi   = var.enable_ebs_csi_driver ? data.aws_eks_addon_version.ebs_csi[0].version : null
+  }
 }
 
 # Security Outputs
@@ -168,4 +189,45 @@ output "kubeconfig" {
     region           = var.region
   })
   sensitive = true
+}
+
+# Access Entries Outputs
+output "access_entries" {
+  description = "Map of all configured access entries"
+  value = {
+    for key, entry in aws_eks_access_entry.this : key => {
+      principal_arn     = entry.principal_arn
+      kubernetes_groups = entry.kubernetes_groups
+      type             = entry.type
+      status           = entry.status
+    }
+  }
+}
+
+output "access_policy_associations" {
+  description = "Map of all policy associations"
+  value = {
+    for key, assoc in aws_eks_access_policy_association.this : key => {
+      principal_arn = assoc.principal_arn
+      policy_arn    = assoc.policy_arn
+      access_scope  = assoc.access_scope
+    }
+  }
+}
+
+output "admin_access_entries" {
+  description = "Access entries with cluster-wide admin permissions"
+  value = {
+    for key, assoc in aws_eks_access_policy_association.this : 
+      key => assoc if assoc.access_scope[0].type == "cluster" && 
+        contains(["arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"], assoc.policy_arn)
+  }
+}
+
+output "namespace_access_entries" {
+  description = "Access entries with namespace-scoped permissions"
+  value = {
+    for key, assoc in aws_eks_access_policy_association.this : 
+      key => assoc if assoc.access_scope[0].type == "namespace"
+  }
 } 
