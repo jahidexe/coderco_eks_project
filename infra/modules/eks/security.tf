@@ -37,13 +37,24 @@ resource "aws_security_group_rule" "node_ingress_cluster" {
   type                     = "ingress"
 }
 
+# Restrict egress to specific CIDR ranges and ports
 resource "aws_security_group_rule" "node_egress_internet" {
-  description       = "Allow nodes to communicate with the internet"
-  from_port         = 0
-  to_port           = 0
-  protocol          = "-1"
+  description       = "Allow nodes to communicate with the internet for updates"
+  from_port         = 443
+  to_port           = 443
+  protocol          = "tcp"
   security_group_id = aws_security_group.node.id
-  cidr_blocks       = ["0.0.0.0/0"]
+  cidr_blocks       = ["10.0.0.0/16"]  # Restrict to VPC CIDR
+  type              = "egress"
+}
+
+resource "aws_security_group_rule" "node_egress_dns" {
+  description       = "Allow nodes to communicate with DNS"
+  from_port         = 53
+  to_port           = 53
+  protocol          = "udp"
+  security_group_id = aws_security_group.node.id
+  cidr_blocks       = ["10.0.0.0/16"]  # Restrict to VPC CIDR
   type              = "egress"
 }
 
@@ -178,4 +189,64 @@ resource "aws_iam_role_policy_attachment" "cloudwatch_agent" {
 
   role       = aws_iam_role.cloudwatch_agent[0].name
   policy_arn = "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
+}
+
+# Cluster Security Group Rules
+resource "aws_security_group_rule" "cluster_egress_internet" {
+  description       = "Allow cluster to communicate with the internet"
+  from_port         = 443
+  to_port           = 443
+  protocol          = "tcp"
+  security_group_id = aws_security_group.cluster.id
+  cidr_blocks       = ["10.0.0.0/16"]  # Restrict to VPC CIDR
+  type              = "egress"
+}
+
+resource "aws_security_group_rule" "cluster_egress_dns" {
+  description       = "Allow cluster to communicate with DNS"
+  from_port         = 53
+  to_port           = 53
+  protocol          = "udp"
+  security_group_id = aws_security_group.cluster.id
+  cidr_blocks       = ["10.0.0.0/16"]  # Restrict to VPC CIDR
+  type              = "egress"
+}
+
+# Add network ACL for additional security layer
+resource "aws_network_acl" "eks" {
+  vpc_id = var.vpc_id
+
+  egress {
+    protocol   = "tcp"
+    rule_no    = 100
+    action     = "allow"
+    cidr_block = "10.0.0.0/16"
+    from_port  = 443
+    to_port    = 443
+  }
+
+  egress {
+    protocol   = "udp"
+    rule_no    = 200
+    action     = "allow"
+    cidr_block = "10.0.0.0/16"
+    from_port  = 53
+    to_port    = 53
+  }
+
+  ingress {
+    protocol   = "tcp"
+    rule_no    = 100
+    action     = "allow"
+    cidr_block = "10.0.0.0/16"
+    from_port  = 1025
+    to_port    = 65535
+  }
+
+  tags = merge(
+    var.tags,
+    {
+      Name = "${var.cluster_name}-network-acl"
+    }
+  )
 } 

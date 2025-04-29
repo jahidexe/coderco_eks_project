@@ -120,9 +120,9 @@ resource "aws_eks_cluster" "this" {
 
   vpc_config {
     subnet_ids              = var.subnet_ids
-    endpoint_private_access = var.endpoint_private_access
-    endpoint_public_access  = var.endpoint_public_access
-    public_access_cidrs     = var.public_access_cidrs
+    endpoint_private_access = true
+    endpoint_public_access  = false
+    public_access_cidrs     = []  # Empty list since public access is disabled
     security_group_ids      = [aws_security_group.cluster[0].id]
   }
 
@@ -377,4 +377,284 @@ data "aws_eks_addon_version" "ebs_csi" {
   addon_name         = "aws-ebs-csi-driver"
   kubernetes_version = aws_eks_cluster.this.version
   most_recent        = var.addon_version_preferences.ebs_csi == "latest" ? true : false
+}
+
+# Add VPC endpoints for AWS services
+resource "aws_vpc_endpoint" "eks" {
+  vpc_id            = var.vpc_id
+  service_name      = "com.amazonaws.${var.region}.eks"
+  vpc_endpoint_type = "Interface"
+
+  security_group_ids = [aws_security_group.cluster[0].id]
+  subnet_ids         = var.subnet_ids
+
+  private_dns_enabled = true
+
+  tags = merge(
+    var.tags,
+    {
+      Name = "${var.cluster_name}-eks-endpoint"
+    }
+  )
+}
+
+resource "aws_vpc_endpoint" "ecr" {
+  vpc_id            = var.vpc_id
+  service_name      = "com.amazonaws.${var.region}.ecr.api"
+  vpc_endpoint_type = "Interface"
+
+  security_group_ids = [aws_security_group.cluster[0].id]
+  subnet_ids         = var.subnet_ids
+
+  private_dns_enabled = true
+
+  tags = merge(
+    var.tags,
+    {
+      Name = "${var.cluster_name}-ecr-endpoint"
+    }
+  )
+}
+
+resource "aws_vpc_endpoint" "ecr_dkr" {
+  vpc_id            = var.vpc_id
+  service_name      = "com.amazonaws.${var.region}.ecr.dkr"
+  vpc_endpoint_type = "Interface"
+
+  security_group_ids = [aws_security_group.cluster[0].id]
+  subnet_ids         = var.subnet_ids
+
+  private_dns_enabled = true
+
+  tags = merge(
+    var.tags,
+    {
+      Name = "${var.cluster_name}-ecr-dkr-endpoint"
+    }
+  )
+}
+
+# OIDC Provider for IRSA
+resource "aws_iam_openid_connect_provider" "this" {
+  count = var.enable_irsa ? 1 : 0
+
+  url             = aws_eks_cluster.this.identity[0].oidc[0].issuer
+  client_id_list  = ["sts.amazonaws.com"]
+  thumbprint_list = [data.tls_certificate.this[0].certificates[0].sha1_fingerprint]
+
+  tags = merge(
+    var.tags,
+    {
+      Name = "${var.cluster_name}-oidc-provider"
+    }
+  )
+}
+
+data "tls_certificate" "this" {
+  count = var.enable_irsa ? 1 : 0
+
+  url = aws_eks_cluster.this.identity[0].oidc[0].issuer
+}
+
+# Custom IAM policy for node groups
+resource "aws_iam_policy" "node_group" {
+  for_each = var.managed_node_groups
+
+  name        = "${var.cluster_name}-${each.key}-node-group-policy"
+  description = "Custom policy for EKS node group with least privilege"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          # EC2 instance management
+          "ec2:DescribeInstances",
+          "ec2:DescribeNetworkInterfaces",
+          "ec2:DescribeTags",
+          "ec2:DescribeVolumes",
+          "ec2:CreateTags",
+          "ec2:DeleteTags",
+          "ec2:AttachVolume",
+          "ec2:DetachVolume",
+          "ec2:DescribeVolumeStatus",
+          "ec2:DescribeVolumesModifications",
+          "ec2:ModifyVolume",
+          "ec2:DescribeInstanceTypes",
+          
+          # Load balancing
+          "elasticloadbalancing:DescribeLoadBalancers",
+          "elasticloadbalancing:DescribeLoadBalancerAttributes",
+          "elasticloadbalancing:DescribeTargetGroups",
+          "elasticloadbalancing:DescribeTargetGroupAttributes",
+          "elasticloadbalancing:DescribeTargetHealth",
+          
+          # ACM certificates
+          "acm:DescribeCertificate",
+          "acm:ListCertificates",
+          
+          # Autoscaling
+          "autoscaling:DescribeAutoScalingGroups",
+          "autoscaling:DescribeAutoScalingInstances",
+          "autoscaling:DescribeLaunchConfigurations",
+          "autoscaling:DescribeTags",
+          
+          # IAM for service accounts
+          "iam:GetRole",
+          "iam:ListAttachedRolePolicies",
+          
+          # CloudWatch logging
+          "logs:CreateLogStream",
+          "logs:PutLogEvents",
+          "logs:DescribeLogGroups",
+          "logs:DescribeLogStreams",
+          
+          # Secret access for pulling private images
+          "secretsmanager:GetSecretValue",
+          "secretsmanager:DescribeSecret",
+          
+          # KMS for volume encryption/decryption
+          "kms:Decrypt",
+          "kms:DescribeKey",
+          "kms:GenerateDataKeyWithoutPlaintext"
+        ],
+        Resource = "*"
+      },
+      {
+        # S3 access with more limited scope for specific buckets
+        Effect = "Allow",
+        Action = [
+          "s3:GetObject",
+          "s3:ListBucket",
+          "s3:GetBucketLocation"
+        ],
+        Resource = [
+          "arn:aws:s3:::${var.cluster_name}-*",
+          "arn:aws:s3:::${var.cluster_name}-*/*",
+          "arn:aws:s3:::eks-*",
+          "arn:aws:s3:::eks-*/*"
+        ]
+      },
+      {
+        # STS permissions for AssumeRole
+        Effect = "Allow",
+        Action = [
+          "sts:AssumeRole",
+          "sts:GetServiceBearerToken"
+        ],
+        Resource = "*",
+        Condition = {
+          StringEquals = {
+            "aws:ResourceAccount": "${data.aws_caller_identity.current.account_id}"
+          }
+        }
+      }
+    ]
+  })
+
+  tags = merge(
+    var.tags,
+    {
+      "kubernetes.io/cluster/${var.cluster_name}" = "owned"
+    }
+  )
+}
+
+# Attach policy to node group roles
+resource "aws_iam_role_policy_attachment" "node_group" {
+  for_each = var.managed_node_groups
+  
+  policy_arn = aws_iam_policy.node_group[each.key].arn
+  role       = aws_iam_role.node_group[each.key].name
+}
+
+# Reference to current account for conditions
+data "aws_caller_identity" "current" {}
+
+# Node Group IAM Role with IMDSv2 enforcement
+resource "aws_iam_role" "node_group" {
+  for_each = var.managed_node_groups
+
+  name = "${var.cluster_name}-${each.key}-node-group-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "ec2.amazonaws.com"
+        }
+        Condition = {
+          StringEquals = {
+            "aws:RequestedRegion" = var.region
+          }
+        }
+      }
+    ]
+  })
+
+  tags = merge(
+    var.tags,
+    {
+      Name = "${var.cluster_name}-${each.key}-node-group-role"
+    }
+  )
+}
+
+# Node Group Security Configuration
+resource "aws_launch_template" "node_group" {
+  for_each = var.managed_node_groups
+
+  name_prefix   = "${var.cluster_name}-${each.key}-"
+  image_id      = data.aws_ami.eks_optimized[each.key].id
+  instance_type = each.value.instance_types[0]
+
+  metadata_options {
+    http_endpoint               = "enabled"
+    http_tokens                 = "required"  # Enforce IMDSv2
+    http_put_response_hop_limit = 2
+  }
+
+  tag_specifications {
+    resource_type = "instance"
+    tags = merge(
+      var.tags,
+      each.value.tags,
+      {
+        Name = "${var.cluster_name}-${each.key}-node"
+      }
+    )
+  }
+
+  tag_specifications {
+    resource_type = "volume"
+    tags = merge(
+      var.tags,
+      each.value.tags,
+      {
+        Name = "${var.cluster_name}-${each.key}-volume"
+      }
+    )
+  }
+}
+
+# EKS Optimized AMI data source
+data "aws_ami" "eks_optimized" {
+  for_each = var.managed_node_groups
+
+  most_recent = true
+  owners      = ["amazon"]
+
+  filter {
+    name   = "name"
+    values = ["amazon-eks-node-${var.kubernetes_version}-*"]
+  }
+
+  filter {
+    name   = "architecture"
+    values = ["x86_64"]
+  }
 }

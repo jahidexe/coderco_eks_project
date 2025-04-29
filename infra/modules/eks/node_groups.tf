@@ -66,12 +66,21 @@ resource "aws_eks_node_group" "this" {
     min_size     = each.value.min_size
   }
 
-  instance_types = each.value.instance_types
+  launch_template {
+    id      = aws_launch_template.node_group[each.key].id
+    version = aws_launch_template.node_group[each.key].latest_version
+  }
+
   capacity_type  = each.value.capacity_type
   ami_type       = each.value.ami_type
   disk_size      = each.value.disk_size
 
-  labels = each.value.labels
+  labels = merge(
+    each.value.labels,
+    {
+      "node.kubernetes.io/instance-type" = each.value.instance_types[0]
+    }
+  )
 
   dynamic "taint" {
     for_each = each.value.taints
@@ -86,6 +95,11 @@ resource "aws_eks_node_group" "this" {
     max_unavailable_percentage = each.value.update_config.max_unavailable_percentage
   }
 
+  # Enable node auto-repair
+  lifecycle {
+    create_before_destroy = true
+  }
+
   tags = merge(
     var.tags,
     each.value.tags,
@@ -97,8 +111,83 @@ resource "aws_eks_node_group" "this" {
   depends_on = [
     aws_iam_role_policy_attachment.node_group_policies,
     aws_iam_role_policy_attachment.node_group_cni_policies,
-    aws_iam_role_policy_attachment.node_group_ecr_policies
+    aws_iam_role_policy_attachment.node_group_ecr_policies,
+    aws_launch_template.node_group
   ]
+}
+
+# Node Group Security Configuration
+resource "aws_launch_template" "node_group" {
+  for_each = var.managed_node_groups
+
+  name_prefix   = "${var.cluster_name}-${each.key}-"
+  image_id      = data.aws_ami.eks_optimized[each.key].id
+  instance_type = each.value.instance_types[0]
+
+  metadata_options {
+    http_endpoint               = "enabled"
+    http_tokens                 = "required"  # Enforce IMDSv2
+    http_put_response_hop_limit = 2
+  }
+
+  block_device_mappings {
+    device_name = "/dev/xvda"
+    ebs {
+      volume_size           = each.value.disk_size
+      volume_type          = "gp3"
+      encrypted            = true
+      delete_on_termination = true
+      iops                 = 3000
+      throughput           = 125
+    }
+  }
+
+  tag_specifications {
+    resource_type = "instance"
+    tags = merge(
+      var.tags,
+      each.value.tags,
+      {
+        Name = "${var.cluster_name}-${each.key}-node"
+      }
+    )
+  }
+
+  tag_specifications {
+    resource_type = "volume"
+    tags = merge(
+      var.tags,
+      each.value.tags,
+      {
+        Name = "${var.cluster_name}-${each.key}-volume"
+      }
+    )
+  }
+
+  user_data = base64encode(templatefile("${path.module}/templates/userdata.sh.tpl", {
+    cluster_name        = var.cluster_name
+    cluster_endpoint    = aws_eks_cluster.this.endpoint
+    cluster_ca          = aws_eks_cluster.this.certificate_authority[0].data
+    bootstrap_extra_args = "--kubelet-extra-args '--node-labels=node.kubernetes.io/instance-type=${each.value.instance_types[0]}'"
+  }))
+}
+
+# EKS Optimized AMI data source
+data "aws_ami" "eks_optimized" {
+  for_each = var.managed_node_groups
+
+  most_recent = true
+  owners      = ["amazon"]
+
+  filter {
+    name   = "name"
+    values = ["amazon-eks-node-${var.kubernetes_version}-*"]
+  }
+
+  filter {
+    name   = "architecture"
+    values = ["x86_64"]
+  }
 }
 
 # Fargate Profiles

@@ -220,10 +220,79 @@ variable "pod_security_standards" {
   type = object({
     enabled = bool
     mode    = string
+    exemptions = object({
+      usernames      = list(string)
+      runtimeClasses = list(string)
+      namespaces     = list(string)
+    })
   })
   default = {
     enabled = true
-    mode    = "baseline"
+    mode    = "restricted"
+    exemptions = {
+      usernames      = []
+      runtimeClasses = []
+      namespaces     = ["kube-system"]
+    }
+  }
+}
+
+variable "pod_security_context" {
+  description = "Default security context for pods"
+  type = object({
+    run_as_non_root = bool
+    run_as_user     = number
+    run_as_group    = number
+    fs_group        = number
+  })
+  default = {
+    run_as_non_root = true
+    run_as_user     = 1000
+    run_as_group    = 3000
+    fs_group        = 2000
+  }
+}
+
+variable "container_security_context" {
+  description = "Default security context for containers"
+  type = object({
+    allow_privilege_escalation = bool
+    read_only_root_filesystem = bool
+    capabilities = object({
+      add  = list(string)
+      drop = list(string)
+    })
+  })
+  default = {
+    allow_privilege_escalation = false
+    read_only_root_filesystem = true
+    capabilities = {
+      add  = []
+      drop = ["ALL"]
+    }
+  }
+}
+
+variable "runtime_security" {
+  description = "Configuration for runtime security"
+  type = object({
+    enabled = bool
+    falco = object({
+      enabled = bool
+      config = map(string)
+    })
+  })
+  default = {
+    enabled = true
+    falco = {
+      enabled = true
+      config = {
+        file_output_enabled = true
+        json_output        = true
+        syslog_output     = true
+        priority          = "debug"
+      }
+    }
   }
 }
 
