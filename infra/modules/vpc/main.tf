@@ -234,8 +234,29 @@ resource "aws_vpc_endpoint" "eks" {
 resource "aws_default_security_group" "default" {
   vpc_id = aws_vpc.main.id
 
-  # No ingress rules - deny all inbound traffic
-  # No egress rules - deny all outbound traffic
+  # Explicitly deny all ingress traffic
+  ingress {
+    description      = "Deny all ingress traffic"
+    from_port        = 0
+    to_port          = 0
+    protocol         = "-1"
+    cidr_blocks      = []
+    ipv6_cidr_blocks = []
+    prefix_list_ids  = []
+    self             = false
+  }
+
+  # Explicitly deny all egress traffic
+  egress {
+    description      = "Deny all egress traffic"
+    from_port        = 0
+    to_port          = 0
+    protocol         = "-1"
+    cidr_blocks      = []
+    ipv6_cidr_blocks = []
+    prefix_list_ids  = []
+    self             = false
+  }
 
   tags = merge(
     local.common_tags,
@@ -244,27 +265,6 @@ resource "aws_default_security_group" "default" {
     }
   )
 
-  # Override the built-in "allow all" ingress with a no-op
-  ingress {
-    description      = "Deny all ingress"
-    from_port        = 0
-    to_port          = 0
-    protocol         = "-1"
-    cidr_blocks      = []
-    ipv6_cidr_blocks = []
-    prefix_list_ids  = []
-    self             = false
-  }
-
-  # Override the built-in "allow all" egress with a no-op
-  egress {
-    description      = "Deny all egress"
-    from_port        = 0
-    to_port          = 0
-    protocol         = "-1"
-    cidr_blocks      = []
-    ipv6_cidr_blocks = []
-    prefix_list_ids  = []
-    self             = false
-  }
+  # Ensure this is created after the VPC
+  depends_on = [aws_vpc.main]
 }
