@@ -1,0 +1,37 @@
+name: Terraform Static Checks
+
+on:
+  push:
+    branches:
+      - 'feature-*'
+      - 'dev'
+
+jobs:
+  terraform-lint-and-scan:
+    name: Terraform Lint & Security Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.6.0
+
+      - name: Terraform Format Check
+        run: terraform fmt -check -recursive
+
+      - name: Install tflint
+        run: |
+          curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash
+
+      - name: Run tflint
+        run: tflint --init && tflint
+
+      - name: Install checkov
+        run: pip install checkov
+
+      - name: Run checkov security scan
+        run: checkov -d .
