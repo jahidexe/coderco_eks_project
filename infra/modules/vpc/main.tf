@@ -214,55 +214,18 @@ resource "aws_vpc_endpoint" "s3" {
   )
 }
 
-# EKS Security Group
-resource "aws_security_group" "eks_cluster_sg" {
-  count       = var.create_eks_security_group ? 1 : 0
-  name        = "${var.name}-eks-cluster-sg"
-  description = "Security group for EKS cluster communication"
-  vpc_id      = aws_vpc.main.id
-
-  dynamic "ingress" {
-    for_each = var.eks_security_group_rules
-    content {
-      description = ingress.value.description
-      from_port   = ingress.value.from_port
-      to_port     = ingress.value.to_port
-      protocol    = ingress.value.protocol
-      cidr_blocks = ingress.value.cidr_blocks
-    }
-  }
-
-  # Allow HTTPS outbound for API calls and updates
-  egress {
-    description = "Allow HTTPS outbound traffic"
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  # Allow DNS outbound
-  egress {
-    description = "Allow DNS outbound traffic"
-    from_port   = 53
-    to_port     = 53
-    protocol    = "udp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  # Allow NTP outbound
-  egress {
-    description = "Allow NTP outbound traffic"
-    from_port   = 123
-    to_port     = 123
-    protocol    = "udp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
+# EKS VPC Endpoint
+resource "aws_vpc_endpoint" "eks" {
+  vpc_id            = aws_vpc.main.id
+  service_name      = "com.amazonaws.${var.region}.eks"
+  vpc_endpoint_type = "Interface"
+  subnet_ids        = aws_subnet.private[*].id
+  private_dns_enabled = true
 
   tags = merge(
     local.common_tags,
     {
-      Name = "${var.name}-eks-cluster-sg"
+      Name = "${var.name}-eks-endpoint"
     }
   )
 }
@@ -280,4 +243,28 @@ resource "aws_default_security_group" "default" {
       Name = "${var.name}-default-sg"
     }
   )
+
+  # Override the built-in "allow all" ingress with a no-op
+  ingress {
+    description      = "Deny all ingress"
+    from_port        = 0
+    to_port          = 0
+    protocol         = "-1"
+    cidr_blocks      = []
+    ipv6_cidr_blocks = []
+    prefix_list_ids  = []
+    self             = false
+  }
+
+  # Override the built-in "allow all" egress with a no-op
+  egress {
+    description      = "Deny all egress"
+    from_port        = 0
+    to_port          = 0
+    protocol         = "-1"
+    cidr_blocks      = []
+    ipv6_cidr_blocks = []
+    prefix_list_ids  = []
+    self             = false
+  }
 }

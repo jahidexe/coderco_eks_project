@@ -34,19 +34,52 @@ resource "aws_iam_role_policy_attachment" "cluster_policies" {
   role       = aws_iam_role.cluster.name
 }
 
-# Cluster Security Group
+# EKS Cluster Security Group
 resource "aws_security_group" "cluster" {
-  count = var.create_cluster_security_group ? 1 : 0
-
-  name_prefix = var.security_group_use_name_prefix ? local.cluster_security_group_name : null
-  name        = var.security_group_use_name_prefix ? null : local.cluster_security_group_name
-  description = "Security group for EKS cluster"
+  name        = "${var.cluster_name}-cluster-sg"
+  description = "Security group for EKS cluster communication"
   vpc_id      = var.vpc_id
+
+  # Allow HTTPS inbound from VPC CIDR
+  ingress {
+    description = "Allow HTTPS inbound traffic"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = [var.vpc_cidr]
+  }
+
+  # Allow HTTPS outbound for API calls and updates
+  egress {
+    description = "Allow HTTPS outbound traffic"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  # Allow DNS outbound
+  egress {
+    description = "Allow DNS outbound traffic"
+    from_port   = 53
+    to_port     = 53
+    protocol    = "udp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  # Allow NTP outbound
+  egress {
+    description = "Allow NTP outbound traffic"
+    from_port   = 123
+    to_port     = 123
+    protocol    = "udp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
 
   tags = merge(
     var.tags,
     {
-      "Name" = local.cluster_security_group_name
+      Name = "${var.cluster_name}-cluster-sg"
     }
   )
 }
@@ -123,7 +156,7 @@ resource "aws_eks_cluster" "this" {
     endpoint_private_access = true
     endpoint_public_access  = false
     public_access_cidrs     = []  # Empty list since public access is disabled
-    security_group_ids      = [aws_security_group.cluster[0].id]
+    security_group_ids      = [aws_security_group.cluster.id]
   }
 
   kubernetes_network_config {
