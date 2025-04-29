@@ -216,6 +216,7 @@ resource "aws_security_group_rule" "cluster_egress_dns" {
 resource "aws_network_acl" "eks" {
   vpc_id = var.vpc_id
 
+  # Allow HTTPS egress to VPC CIDR
   egress {
     protocol   = "tcp"
     rule_no    = 100
@@ -225,6 +226,7 @@ resource "aws_network_acl" "eks" {
     to_port    = 443
   }
 
+  # Allow DNS egress to VPC CIDR
   egress {
     protocol   = "udp"
     rule_no    = 200
@@ -234,13 +236,34 @@ resource "aws_network_acl" "eks" {
     to_port    = 53
   }
 
+  # Allow ephemeral ports ingress from VPC CIDR
   ingress {
     protocol   = "tcp"
-    rule_no    = 100
+    rule_no    = 300
     action     = "allow"
     cidr_block = "10.0.0.0/16"
     from_port  = 1025
     to_port    = 65535
+  }
+
+  # Deny all other ingress traffic
+  ingress {
+    protocol   = "-1"
+    rule_no    = 32766
+    action     = "deny"
+    cidr_block = "0.0.0.0/0"
+    from_port  = 0
+    to_port    = 0
+  }
+
+  # Deny all other egress traffic
+  egress {
+    protocol   = "-1"
+    rule_no    = 32766
+    action     = "deny"
+    cidr_block = "0.0.0.0/0"
+    from_port  = 0
+    to_port    = 0
   }
 
   tags = merge(
