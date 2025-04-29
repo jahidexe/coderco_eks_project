@@ -232,10 +232,30 @@ resource "aws_security_group" "eks_cluster_sg" {
     }
   }
   
+  # Allow HTTPS outbound for API calls and updates
   egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
+    description = "Allow HTTPS outbound traffic"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  # Allow DNS outbound
+  egress {
+    description = "Allow DNS outbound traffic"
+    from_port   = 53
+    to_port     = 53
+    protocol    = "udp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  # Allow NTP outbound
+  egress {
+    description = "Allow NTP outbound traffic"
+    from_port   = 123
+    to_port     = 123
+    protocol    = "udp"
     cidr_blocks = ["0.0.0.0/0"]
   }
   
@@ -243,6 +263,32 @@ resource "aws_security_group" "eks_cluster_sg" {
     local.common_tags,
     {
       Name = "${var.name}-eks-cluster-sg"
+    }
+  )
+}
+
+# Default Security Group
+resource "aws_default_security_group" "default" {
+  vpc_id = aws_vpc.main.id
+
+  ingress {
+    protocol  = -1
+    self      = true
+    from_port = 0
+    to_port   = 0
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = merge(
+    local.common_tags,
+    {
+      Name = "${var.name}-default-sg"
     }
   )
 }

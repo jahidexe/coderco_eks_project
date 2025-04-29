@@ -212,7 +212,7 @@ resource "aws_security_group_rule" "cluster_egress_dns" {
   type              = "egress"
 }
 
-# Add network ACL for additional security layer
+# Network ACL
 resource "aws_network_acl" "eks" {
   vpc_id = var.vpc_id
 
@@ -249,4 +249,12 @@ resource "aws_network_acl" "eks" {
       Name = "${var.cluster_name}-network-acl"
     }
   )
+}
+
+# Network ACL Associations
+resource "aws_network_acl_association" "eks" {
+  for_each = toset(var.subnet_ids)
+
+  network_acl_id = aws_network_acl.eks.id
+  subnet_id      = each.value
 } 

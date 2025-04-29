@@ -124,6 +124,8 @@ resource "aws_launch_template" "node_group" {
   image_id      = data.aws_ami.eks_optimized[each.key].id
   instance_type = each.value.instance_types[0]
 
+  vpc_security_group_ids = [aws_security_group.node.id]
+
   metadata_options {
     http_endpoint               = "enabled"
     http_tokens                 = "required"  # Enforce IMDSv2
