@@ -130,7 +130,7 @@ variable "kms_key_deletion_window" {
 variable "cluster_policies" {
   description = "List of IAM policy ARNs to attach to the EKS cluster role"
   type        = list(string)
-  default     = [
+  default = [
     "arn:aws:iam::aws:policy/AmazonEKSClusterPolicy",
     "arn:aws:iam::aws:policy/AmazonEKSVPCResourceController"
   ]
@@ -140,16 +140,16 @@ variable "cluster_policies" {
 variable "managed_node_groups" {
   description = "Map of managed node group configurations"
   type = map(object({
-    name                 = string
-    instance_types      = list(string)
-    min_size            = number
-    max_size            = number
-    desired_size        = number
-    capacity_type       = string
-    ami_type            = string
-    disk_size           = number
-    labels              = map(string)
-    taints              = list(object({
+    name           = string
+    instance_types = list(string)
+    min_size       = number
+    max_size       = number
+    desired_size   = number
+    capacity_type  = string
+    ami_type       = string
+    disk_size      = number
+    labels         = map(string)
+    taints = list(object({
       key    = string
       value  = string
       effect = string
@@ -262,7 +262,7 @@ variable "container_security_context" {
   description = "Default security context for containers"
   type = object({
     allow_privilege_escalation = bool
-    read_only_root_filesystem = bool
+    read_only_root_filesystem  = bool
     capabilities = object({
       add  = list(string)
       drop = list(string)
@@ -270,7 +270,7 @@ variable "container_security_context" {
   })
   default = {
     allow_privilege_escalation = false
-    read_only_root_filesystem = true
+    read_only_root_filesystem  = true
     capabilities = {
       add  = []
       drop = ["ALL"]
@@ -284,7 +284,7 @@ variable "runtime_security" {
     enabled = bool
     falco = object({
       enabled = bool
-      config = map(string)
+      config  = map(string)
     })
   })
   default = {
@@ -293,9 +293,9 @@ variable "runtime_security" {
       enabled = true
       config = {
         file_output_enabled = true
-        json_output        = true
-        syslog_output     = true
-        priority          = "debug"
+        json_output         = true
+        syslog_output       = true
+        priority            = "debug"
       }
     }
   }
@@ -360,14 +360,14 @@ variable "region" {
 variable "access_entries" {
   description = "Map of EKS cluster access entries defining which IAM principals can access the cluster and their permissions"
   type = map(object({
-    principal_arn     = string  # The IAM ARN of the user or role
-    kubernetes_groups = optional(list(string))  # Kubernetes RBAC groups
-    type              = optional(string, "STANDARD")  # Access entry type
+    principal_arn     = string                       # The IAM ARN of the user or role
+    kubernetes_groups = optional(list(string))       # Kubernetes RBAC groups
+    type              = optional(string, "STANDARD") # Access entry type
     policy_associations = map(object({
-      policy_arn = string  # EKS access policy ARN to associate
+      policy_arn = string # EKS access policy ARN to associate
       access_scope = object({
-        type       = string        # "cluster" or "namespace" 
-        namespaces = optional(list(string))  # Required if type is "namespace"
+        type       = string                 # "cluster" or "namespace" 
+        namespaces = optional(list(string)) # Required if type is "namespace"
       })
     }))
   }))
@@ -397,8 +397,8 @@ variable "access_entries" {
   validation {
     condition = alltrue([
       for entry in var.access_entries : alltrue([
-        for assoc in entry.policy_associations : 
-          assoc.access_scope.type != "namespace" || length(assoc.access_scope.namespaces) > 0
+        for assoc in entry.policy_associations :
+        assoc.access_scope.type != "namespace" || length(assoc.access_scope.namespaces) > 0
       ])
     ])
     error_message = "Namespaces must be specified when access scope type is 'namespace'"
@@ -414,32 +414,32 @@ variable "disable_bootstrap_creator_admin" {
 variable "addon_version_preferences" {
   description = "Version preferences for EKS add-ons"
   type = object({
-    vpc_cni   = string
-    coredns   = string
+    vpc_cni    = string
+    coredns    = string
     kube_proxy = string
-    ebs_csi   = string
+    ebs_csi    = string
   })
   default = {
-    vpc_cni   = "latest"
-    coredns   = "latest"
+    vpc_cni    = "latest"
+    coredns    = "latest"
     kube_proxy = "latest"
-    ebs_csi   = "latest"
+    ebs_csi    = "latest"
   }
 }
 
 variable "addon_configurations" {
   description = "Configuration values for EKS add-ons"
   type = object({
-    vpc_cni = map(string)
-    coredns = map(string)
+    vpc_cni    = map(string)
+    coredns    = map(string)
     kube_proxy = map(string)
-    ebs_csi = map(string)
+    ebs_csi    = map(string)
   })
   default = {
-    vpc_cni   = {}
-    coredns   = {}
+    vpc_cni    = {}
+    coredns    = {}
     kube_proxy = {}
-    ebs_csi   = {}
+    ebs_csi    = {}
   }
 }
 
@@ -515,14 +515,14 @@ variable "maintain_default_security_group_rules" {
 variable "security_rule" {
   description = "Type definition for security group rules"
   type = object({
-    type                    = string
-    protocol               = string
-    from_port              = number
-    to_port                = number
-    description            = string
-    cidr_blocks            = optional(list(string))
+    type                     = string
+    protocol                 = string
+    from_port                = number
+    to_port                  = number
+    description              = string
+    cidr_blocks              = optional(list(string))
     source_security_group_id = optional(string)
-    self                   = optional(bool)
+    self                     = optional(bool)
   })
   default = null
 }
@@ -531,13 +531,13 @@ variable "cluster_security_group_rules" {
   description = "Additional security group rules for the cluster"
   type = map(object({
     description              = string
-    protocol                = string
-    from_port               = number
-    to_port                 = number
-    type                    = string
-    cidr_blocks             = optional(list(string))
+    protocol                 = string
+    from_port                = number
+    to_port                  = number
+    type                     = string
+    cidr_blocks              = optional(list(string))
     source_security_group_id = optional(string)
-    self                    = optional(bool)
+    self                     = optional(bool)
   }))
   default = {}
 }
@@ -546,13 +546,13 @@ variable "node_security_group_rules" {
   description = "Additional security group rules for the nodes"
   type = map(object({
     description              = string
-    protocol                = string
-    from_port               = number
-    to_port                 = number
-    type                    = string
-    cidr_blocks             = optional(list(string))
+    protocol                 = string
+    from_port                = number
+    to_port                  = number
+    type                     = string
+    cidr_blocks              = optional(list(string))
     source_security_group_id = optional(string)
-    self                    = optional(bool)
+    self                     = optional(bool)
   }))
   default = {}
 }

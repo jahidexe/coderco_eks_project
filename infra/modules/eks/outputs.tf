@@ -169,7 +169,7 @@ output "access_entries" {
     for key, entry in aws_eks_access_entry.this : key => {
       principal_arn     = entry.principal_arn
       kubernetes_groups = entry.kubernetes_groups
-      type             = entry.type
+      type              = entry.type
     }
   }
 }
@@ -188,17 +188,17 @@ output "access_policy_associations" {
 output "admin_access_entries" {
   description = "Access entries with cluster-wide admin permissions"
   value = {
-    for key, assoc in aws_eks_access_policy_association.this : 
-      key => assoc if assoc.access_scope[0].type == "cluster" && 
-        contains(["arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"], assoc.policy_arn)
+    for key, assoc in aws_eks_access_policy_association.this :
+    key => assoc if assoc.access_scope[0].type == "cluster" &&
+    contains(["arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"], assoc.policy_arn)
   }
 }
 
 output "namespace_access_entries" {
   description = "Access entries with namespace-scoped permissions"
   value = {
-    for key, assoc in aws_eks_access_policy_association.this : 
-      key => assoc if assoc.access_scope[0].type == "namespace"
+    for key, assoc in aws_eks_access_policy_association.this :
+    key => assoc if assoc.access_scope[0].type == "namespace"
   }
 }
 

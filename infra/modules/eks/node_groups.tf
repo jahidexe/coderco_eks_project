@@ -71,9 +71,9 @@ resource "aws_eks_node_group" "this" {
     version = aws_launch_template.node_group[each.key].latest_version
   }
 
-  capacity_type  = each.value.capacity_type
-  ami_type       = each.value.ami_type
-  disk_size      = each.value.disk_size
+  capacity_type = each.value.capacity_type
+  ami_type      = each.value.ami_type
+  disk_size     = each.value.disk_size
 
   labels = merge(
     each.value.labels,
@@ -116,7 +116,7 @@ resource "aws_launch_template" "node_group" {
   name_prefix   = "${var.cluster_name}-${each.key}-"
   image_id      = data.aws_ami.eks_optimized[each.key].id
   instance_type = each.value.instance_types[0]
-  user_data     = base64encode(templatefile("${path.module}/templates/userdata.sh", {
+  user_data = base64encode(templatefile("${path.module}/templates/userdata.sh", {
     cluster_name        = var.cluster_name
     cluster_endpoint    = aws_eks_cluster.this.endpoint
     cluster_auth_base64 = aws_eks_cluster.this.certificate_authority[0].data
@@ -173,7 +173,7 @@ resource "aws_eks_fargate_profile" "this" {
   cluster_name           = aws_eks_cluster.this.name
   fargate_profile_name   = each.value.name
   pod_execution_role_arn = aws_iam_role.fargate[each.key].arn
-  subnet_ids            = var.subnet_ids
+  subnet_ids             = var.subnet_ids
 
   selector {
     namespace = each.value.namespace

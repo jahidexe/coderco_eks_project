@@ -40,13 +40,13 @@ resource "aws_security_group" "node" {
 resource "aws_security_group_rule" "cluster" {
   for_each = var.create_cluster_security_group ? local.security_rules.cluster : {}
 
-  security_group_id = aws_security_group.cluster[0].id
-  type              = each.value.type
-  protocol          = each.value.protocol
-  from_port         = each.value.from_port
-  to_port           = each.value.to_port
-  cidr_blocks       = lookup(each.value, "cidr_blocks", null)
-  self              = lookup(each.value, "self", null)
+  security_group_id        = aws_security_group.cluster[0].id
+  type                     = each.value.type
+  protocol                 = each.value.protocol
+  from_port                = each.value.from_port
+  to_port                  = each.value.to_port
+  cidr_blocks              = lookup(each.value, "cidr_blocks", null)
+  self                     = lookup(each.value, "self", null)
   source_security_group_id = lookup(each.value, "source_security_group_id", null)
 
   description = each.value.description
@@ -56,13 +56,13 @@ resource "aws_security_group_rule" "cluster" {
 resource "aws_security_group_rule" "node" {
   for_each = var.create_node_security_group ? local.security_rules.nodes : {}
 
-  security_group_id = aws_security_group.node[0].id
-  type              = each.value.type
-  protocol          = each.value.protocol
-  from_port         = each.value.from_port
-  to_port           = each.value.to_port
-  cidr_blocks       = lookup(each.value, "cidr_blocks", null)
-  self              = lookup(each.value, "self", null)
+  security_group_id        = aws_security_group.node[0].id
+  type                     = each.value.type
+  protocol                 = each.value.protocol
+  from_port                = each.value.from_port
+  to_port                  = each.value.to_port
+  cidr_blocks              = lookup(each.value, "cidr_blocks", null)
+  self                     = lookup(each.value, "self", null)
   source_security_group_id = lookup(each.value, "source_security_group_id", null)
 
   description = each.value.description

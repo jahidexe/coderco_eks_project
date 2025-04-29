@@ -69,7 +69,7 @@ resource "aws_eks_access_entry" "this" {
 
   cluster_name  = aws_eks_cluster.this.name
   principal_arn = each.value.principal_arn
-  type         = each.value.type
+  type          = each.value.type
 
   kubernetes_groups = each.value.kubernetes_groups
 
@@ -110,7 +110,7 @@ resource "aws_eks_access_policy_association" "this" {
 # Add-on Version Data Sources
 data "aws_eks_addon_version" "addons" {
   for_each = { for k, v in local.addons : k => v if v.enabled }
-  
+
   addon_name         = each.value.name
   kubernetes_version = aws_eks_cluster.this.version
   most_recent        = var.addon_version_preferences[each.key] == "latest"
@@ -121,13 +121,13 @@ resource "aws_eks_addon" "addons" {
   for_each = { for k, v in local.addons : k => v if v.enabled }
 
   cluster_name                = aws_eks_cluster.this.name
-  addon_name                 = each.value.name
-  addon_version              = data.aws_eks_addon_version.addons[each.key].version
+  addon_name                  = each.value.name
+  addon_version               = data.aws_eks_addon_version.addons[each.key].version
   resolve_conflicts_on_create = var.addon_conflict_resolution.on_create
   resolve_conflicts_on_update = var.addon_conflict_resolution.on_update
-  
+
   # Special handling for EBS CSI driver
-  service_account_role_arn   = each.key == "ebs_csi" ? aws_iam_role.ebs_csi_driver[0].arn : null
+  service_account_role_arn = each.key == "ebs_csi" ? aws_iam_role.ebs_csi_driver[0].arn : null
 
   tags = merge(
     local.common_tags,
@@ -145,14 +145,14 @@ resource "aws_eks_addon" "addons" {
 # VPC Endpoints
 resource "aws_vpc_endpoint" "endpoints" {
   for_each = local.vpc_endpoints
-  
-  vpc_id               = var.vpc_id
-  service_name         = "com.amazonaws.${var.region}.${each.value.service}"
-  vpc_endpoint_type    = each.value.type
-  security_group_ids   = [aws_security_group.cluster[0].id]
-  subnet_ids           = var.subnet_ids
-  private_dns_enabled  = true
-  
+
+  vpc_id              = var.vpc_id
+  service_name        = "com.amazonaws.${var.region}.${each.value.service}"
+  vpc_endpoint_type   = each.value.type
+  security_group_ids  = [aws_security_group.cluster[0].id]
+  subnet_ids          = var.subnet_ids
+  private_dns_enabled = true
+
   tags = merge(
     local.common_tags,
     {

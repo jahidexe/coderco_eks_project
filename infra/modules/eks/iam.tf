@@ -45,7 +45,7 @@ resource "aws_iam_openid_connect_provider" "eks_oidc" {
   tags = merge(
     var.tags,
     {
-      Name = "${var.cluster_name}-oidc-provider"
+      Name                                        = "${var.cluster_name}-oidc-provider"
       "kubernetes.io/cluster/${var.cluster_name}" = "owned"
     }
   )
@@ -88,7 +88,7 @@ resource "aws_iam_role" "service_account_role" {
   tags = merge(
     var.tags,
     {
-      Name = "${var.cluster_name}-service-account-role"
+      Name                                        = "${var.cluster_name}-service-account-role"
       "kubernetes.io/cluster/${var.cluster_name}" = "owned"
     }
   )
@@ -124,7 +124,7 @@ resource "aws_iam_role" "aws_load_balancer_controller" {
   tags = merge(
     var.tags,
     {
-      Name = "${var.cluster_name}-aws-load-balancer-controller"
+      Name                                        = "${var.cluster_name}-aws-load-balancer-controller"
       "kubernetes.io/cluster/${var.cluster_name}" = "owned"
     }
   )
@@ -160,7 +160,7 @@ resource "aws_iam_role" "ebs_csi_driver" {
   tags = merge(
     var.tags,
     {
-      Name = "${var.cluster_name}-ebs-csi-driver"
+      Name                                        = "${var.cluster_name}-ebs-csi-driver"
       "kubernetes.io/cluster/${var.cluster_name}" = "owned"
     }
   )
@@ -194,38 +194,38 @@ resource "aws_iam_policy" "node_group" {
           "ec2:DescribeVolumesModifications",
           "ec2:ModifyVolume",
           "ec2:DescribeInstanceTypes",
-          
+
           # Load balancing
           "elasticloadbalancing:DescribeLoadBalancers",
           "elasticloadbalancing:DescribeLoadBalancerAttributes",
           "elasticloadbalancing:DescribeTargetGroups",
           "elasticloadbalancing:DescribeTargetGroupAttributes",
           "elasticloadbalancing:DescribeTargetHealth",
-          
+
           # ACM certificates
           "acm:DescribeCertificate",
           "acm:ListCertificates",
-          
+
           # Autoscaling
           "autoscaling:DescribeAutoScalingGroups",
           "autoscaling:DescribeAutoScalingInstances",
           "autoscaling:DescribeLaunchConfigurations",
           "autoscaling:DescribeTags",
-          
+
           # IAM for service accounts
           "iam:GetRole",
           "iam:ListAttachedRolePolicies",
-          
+
           # CloudWatch logging
           "logs:CreateLogStream",
           "logs:PutLogEvents",
           "logs:DescribeLogGroups",
           "logs:DescribeLogStreams",
-          
+
           # Secret access for pulling private images
           "secretsmanager:GetSecretValue",
           "secretsmanager:DescribeSecret",
-          
+
           # KMS for volume encryption/decryption
           "kms:Decrypt",
           "kms:DescribeKey",
@@ -258,7 +258,7 @@ resource "aws_iam_policy" "node_group" {
         Resource = "*",
         Condition = {
           StringEquals = {
-            "aws:ResourceAccount": "${data.aws_caller_identity.current.account_id}"
+            "aws:ResourceAccount" : "${data.aws_caller_identity.current.account_id}"
           }
         }
       }
@@ -276,7 +276,7 @@ resource "aws_iam_policy" "node_group" {
 # Attach policy to node group roles
 resource "aws_iam_role_policy_attachment" "node_group" {
   for_each = var.managed_node_groups
-  
+
   policy_arn = aws_iam_policy.node_group[each.key].arn
   role       = aws_iam_role.node_group[each.key].name
 }

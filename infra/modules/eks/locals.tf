@@ -4,11 +4,11 @@
 
 locals {
   # Base security group rule type definition - moved to variables.tf
-  
+
   # Common naming convention
   names = {
-    cluster_sg = var.security_group_use_name_prefix ? "${var.cluster_name}-cluster-sg-" : "${var.cluster_name}-cluster-sg"
-    node_sg    = var.security_group_use_name_prefix ? "${var.cluster_name}-node-sg-" : "${var.cluster_name}-node-sg"
+    cluster_sg   = var.security_group_use_name_prefix ? "${var.cluster_name}-cluster-sg-" : "${var.cluster_name}-cluster-sg"
+    node_sg      = var.security_group_use_name_prefix ? "${var.cluster_name}-node-sg-" : "${var.cluster_name}-node-sg"
     cluster_role = "${var.cluster_name}-cluster-role"
     node_role    = "${var.cluster_name}-node-role"
     kms_key      = "${var.cluster_name}-cluster-key"
@@ -19,8 +19,8 @@ locals {
   common_tags = merge(
     var.tags,
     {
-      Cluster     = var.cluster_name
-      ManagedBy   = "terraform"
+      Cluster   = var.cluster_name
+      ManagedBy = "terraform"
     }
   )
 
@@ -134,8 +134,8 @@ locals {
   # Feature flags with consistent types
   features = {
     encryption_enabled = var.kms_key_arn != null && var.kms_key_arn != ""
-    logging_enabled   = length(coalesce(var.enabled_cluster_log_types, [])) > 0
-    private_access    = true
-    public_access     = false
+    logging_enabled    = length(coalesce(var.enabled_cluster_log_types, [])) > 0
+    private_access     = true
+    public_access      = false
   }
 }
