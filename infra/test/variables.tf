@@ -58,7 +58,7 @@ variable "azs" {
 variable "map_public_ip_on_launch" {
   description = "Should be false if you do not want to auto-assign public IP on launch"
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "enable_nat_gateway" {
@@ -112,7 +112,7 @@ variable "eks_security_group_rules" {
 variable "tags" {
   description = "A map of tags to add to all resources"
   type        = map(string)
-  default     = {
+  default = {
     Environment = "test"
     ManagedBy   = "Terraform"
     Project     = "eks-test"

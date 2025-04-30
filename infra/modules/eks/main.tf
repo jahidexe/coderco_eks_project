@@ -1,115 +1,93 @@
-###############################################
-# main.tf - EKS Cluster Module
-###############################################
+# Reference to current account for conditions
+data "aws_caller_identity" "current" {}
 
-# EKS Cluster Role
-resource "aws_iam_role" "cluster" {
-  name = "${var.cluster_name}-cluster-role"
+# KMS key for EKS cluster encryption
+resource "aws_kms_key" "cluster" {
+  description             = "KMS key for EKS cluster ${var.cluster_name} encryption"
+  deletion_window_in_days = var.kms_key_deletion_window
+  enable_key_rotation     = true
+  multi_region            = false
 
-  assume_role_policy = jsonencode({
+  policy = jsonencode({
     Version = "2012-10-17"
+    Id      = "${var.cluster_name}-key-policy"
     Statement = [
       {
-        Action = "sts:AssumeRole"
+        Sid    = "Enable IAM User Permissions"
         Effect = "Allow"
         Principal = {
-          Service = "eks.amazonaws.com"
+          AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
         }
+        Action   = "kms:*"
+        Resource = "*"
+      },
+      {
+        Sid    = "Allow EKS Service"
+        Effect = "Allow"
+        Principal = {
+          AWS = aws_iam_role.cluster.arn
+        }
+        Action = [
+          "kms:Encrypt",
+          "kms:Decrypt",
+          "kms:ReEncrypt*",
+          "kms:GenerateDataKey*",
+          "kms:DescribeKey"
+        ]
+        Resource = "*"
+      },
+      {
+        Sid    = "Allow CloudWatch Logs"
+        Effect = "Allow"
+        Principal = {
+          Service = "logs.${var.region}.amazonaws.com"
+        }
+        Action = [
+          "kms:Encrypt*",
+          "kms:Decrypt*",
+          "kms:ReEncrypt*",
+          "kms:GenerateDataKey*",
+          "kms:Describe*"
+        ]
+        Resource = "*"
+        Condition = {
+          ArnLike = {
+            "kms:EncryptionContext:aws:logs:arn" : "arn:aws:logs:${var.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/eks/${var.cluster_name}/*"
+          }
+        }
+      },
+      {
+        Sid    = "Allow Node Groups"
+        Effect = "Allow"
+        Principal = {
+          AWS = concat(
+            [for ng in aws_iam_role.node_group : ng.arn],
+            [aws_iam_role.cluster.arn]
+          )
+        }
+        Action = [
+          "kms:Decrypt",
+          "kms:DescribeKey",
+          "kms:Encrypt",
+          "kms:GenerateDataKey*",
+          "kms:ReEncrypt*"
+        ]
+        Resource = "*"
       }
     ]
   })
 
   tags = merge(
-    var.tags,
+    local.resource_tags["kms_key"],
     {
-      Name = "${var.cluster_name}-cluster-role"
+      "kubernetes.io/cluster/${var.cluster_name}" = "owned"
     }
   )
 }
 
-# Dynamic IAM policy attachments
-resource "aws_iam_role_policy_attachment" "cluster_policies" {
-  for_each   = toset(var.cluster_policies)
-  policy_arn = each.value
-  role       = aws_iam_role.cluster.name
-}
-
-# Cluster Security Group
-resource "aws_security_group" "cluster" {
-  count = var.create_cluster_security_group ? 1 : 0
-
-  name_prefix = var.security_group_use_name_prefix ? local.cluster_security_group_name : null
-  name        = var.security_group_use_name_prefix ? null : local.cluster_security_group_name
-  description = "Security group for EKS cluster"
-  vpc_id      = var.vpc_id
-
-  tags = merge(
-    var.tags,
-    {
-      "Name" = local.cluster_security_group_name
-    }
-  )
-}
-
-# Node Security Group
-resource "aws_security_group" "node" {
-  count = var.create_node_security_group ? 1 : 0
-
-  name_prefix = var.security_group_use_name_prefix ? local.node_security_group_name : null
-  name        = var.security_group_use_name_prefix ? null : local.node_security_group_name
-  description = "Security group for EKS nodes"
-  vpc_id      = var.vpc_id
-
-  tags = merge(
-    var.tags,
-    {
-      "Name" = local.node_security_group_name
-    }
-  )
-}
-
-# Cluster Security Group Rules
-resource "aws_security_group_rule" "cluster" {
-  for_each = var.create_cluster_security_group ? local.cluster_security_group_rules : {}
-
-  security_group_id = aws_security_group.cluster[0].id
-  description       = each.value.description
-  type              = each.value.type
-  protocol          = each.value.protocol
-  from_port         = each.value.from_port
-  to_port           = each.value.to_port
-  cidr_blocks       = lookup(each.value, "cidr_blocks", null)
-  self              = lookup(each.value, "self", null)
-  source_security_group_id = lookup(each.value, "source_security_group_id", null)
-}
-
-# Node Security Group Rules
-resource "aws_security_group_rule" "node" {
-  for_each = var.create_node_security_group ? local.node_security_group_rules : {}
-
-  security_group_id = aws_security_group.node[0].id
-  description       = each.value.description
-  type              = each.value.type
-  protocol          = each.value.protocol
-  from_port         = each.value.from_port
-  to_port           = each.value.to_port
-  cidr_blocks       = lookup(each.value, "cidr_blocks", null)
-  self              = lookup(each.value, "self", null)
-  source_security_group_id = lookup(each.value, "source_security_group_id", null)
-}
-
-# KMS Key for Cluster Encryption
-resource "aws_kms_key" "cluster" {
-  description             = "KMS key for EKS cluster encryption"
-  deletion_window_in_days = var.kms_key_deletion_window
-  enable_key_rotation     = true
-
-  tags = merge(
-    var.tags,
-    {
-      Name = "${var.cluster_name}-kms-key"
-    }
-  )
+resource "aws_kms_alias" "cluster" {
+  name          = "alias/${local.names.kms_key}"
+  target_key_id = aws_kms_key.cluster.key_id
 }
 
 # EKS Cluster
@@ -120,10 +98,10 @@ resource "aws_eks_cluster" "this" {
 
   vpc_config {
     subnet_ids              = var.subnet_ids
-    endpoint_private_access = var.endpoint_private_access
-    endpoint_public_access  = var.endpoint_public_access
-    public_access_cidrs     = var.public_access_cidrs
-    security_group_ids      = [aws_security_group.cluster[0].id]
+    endpoint_private_access = local.features.private_access
+    endpoint_public_access  = local.features.public_access
+    security_group_ids      = var.create_security_group ? [aws_security_group.cluster[0].id] : []
+
   }
 
   kubernetes_network_config {
@@ -131,7 +109,7 @@ resource "aws_eks_cluster" "this" {
     ip_family         = var.ip_family
   }
 
-  enabled_cluster_log_types = var.enabled_cluster_log_types
+  enabled_cluster_log_types = local.features.logging_enabled ? var.enabled_cluster_log_types : []
 
   encryption_config {
     provider {
@@ -140,42 +118,31 @@ resource "aws_eks_cluster" "this" {
     resources = ["secrets"]
   }
 
-  # Disable bootstrap creator admin permissions
-  bootstrap_cluster_creator_admin_permissions = !var.disable_bootstrap_creator_admin
-
-  tags = merge(
-    var.tags,
-    var.cluster_tags,
-    {
-      Name = var.cluster_name
-    }
-  )
+  tags = local.tags
 
   # Ensure IAM role permissions are created before cluster
   depends_on = [
     aws_iam_role_policy_attachment.cluster_policies,
-    aws_cloudwatch_log_group.eks_logs
+    aws_cloudwatch_log_group.eks_logs,
+    aws_security_group.cluster
   ]
 
   lifecycle {
     # Prevent accidental cluster replacement
     prevent_destroy = false
-    ignore_changes = [
-      bootstrap_cluster_creator_admin_permissions
-    ]
   }
 }
 
 # CloudWatch Log Group for EKS control plane logs
 resource "aws_cloudwatch_log_group" "eks_logs" {
   count             = length(var.enabled_cluster_log_types) > 0 ? 1 : 0
-  name              = "/aws/eks/${var.cluster_name}/cluster"
-  retention_in_days = var.log_retention_days
-
+  name              = local.names.log_group
+  retention_in_days = max(var.log_retention_days, 365) # Ensure minimum 1 year retention
+  kms_key_id        = aws_kms_key.cluster.arn
   tags = merge(
-    var.tags,
+    local.resource_tags["log_group"],
     {
-      Name = "${var.cluster_name}-logs"
+      "kubernetes.io/cluster/${var.cluster_name}" = "owned"
     }
   )
 }
@@ -186,7 +153,7 @@ resource "aws_eks_access_entry" "this" {
 
   cluster_name  = aws_eks_cluster.this.name
   principal_arn = each.value.principal_arn
-  type         = each.value.type
+  type          = each.value.type
 
   kubernetes_groups = each.value.kubernetes_groups
 
@@ -200,23 +167,23 @@ resource "aws_eks_access_entry" "this" {
 
 # Policy Associations
 resource "aws_eks_access_policy_association" "this" {
-  for_each = {
-    for entry_key, entry in var.access_entries : 
+  for_each = merge([
+    for entry_key, entry in var.access_entries : {
+      for assoc_key, assoc in entry.policy_associations :
       "${entry_key}-${assoc_key}" => {
         entry_key = entry_key
         assoc     = assoc
       }
-    for assoc_key, assoc in entry.policy_associations
-  }
+    }
+  ]...)
 
   cluster_name  = aws_eks_cluster.this.name
   principal_arn = aws_eks_access_entry.this[each.value.entry_key].principal_arn
   policy_arn    = each.value.assoc.policy_arn
 
   access_scope {
-    type = each.value.assoc.access_scope.type
-    namespaces = each.value.assoc.access_scope.type == "namespace" ? 
-      each.value.assoc.access_scope.namespaces : null
+    type       = each.value.assoc.access_scope.type
+    namespaces = each.value.assoc.access_scope.type == "namespace" ? each.value.assoc.access_scope.namespaces : null
   }
 
   depends_on = [
@@ -224,157 +191,59 @@ resource "aws_eks_access_policy_association" "this" {
   ]
 }
 
-# VPC CNI Add-on
-resource "aws_eks_addon" "vpc_cni" {
-  count = var.enable_vpc_cni ? 1 : 0
-
-  cluster_name                = aws_eks_cluster.this.name
-  addon_name                 = "vpc-cni"
-  addon_version              = var.addon_version_preferences.vpc_cni == "latest" ? data.aws_eks_addon_version.vpc_cni[0].version : var.addon_version_preferences.vpc_cni
-  resolve_conflicts_on_create = var.addon_conflict_resolution.on_create
-  resolve_conflicts_on_update = var.addon_conflict_resolution.on_update
-  configuration_values       = jsonencode(var.addon_configurations.vpc_cni)
-  service_account_role_arn   = aws_iam_role.aws_load_balancer_controller[0].arn
-
-  timeouts {
-    create = var.addon_timeouts.create
-    update = var.addon_timeouts.update
-    delete = var.addon_timeouts.delete
-  }
-
-  tags = merge(
-    var.tags,
-    var.addon_tags,
-    {
-      Name = "${var.cluster_name}-vpc-cni"
-    }
-  )
-
-  depends_on = [
-    aws_eks_node_group.this
-  ]
-}
-
-# CoreDNS Add-on
-resource "aws_eks_addon" "coredns" {
-  count = var.enable_coredns ? 1 : 0
-
-  cluster_name                = aws_eks_cluster.this.name
-  addon_name                 = "coredns"
-  addon_version              = var.addon_version_preferences.coredns == "latest" ? data.aws_eks_addon_version.coredns[0].version : var.addon_version_preferences.coredns
-  resolve_conflicts_on_create = var.addon_conflict_resolution.on_create
-  resolve_conflicts_on_update = var.addon_conflict_resolution.on_update
-  configuration_values       = jsonencode(var.addon_configurations.coredns)
-
-  timeouts {
-    create = var.addon_timeouts.create
-    update = var.addon_timeouts.update
-    delete = var.addon_timeouts.delete
-  }
-
-  tags = merge(
-    var.tags,
-    var.addon_tags,
-    {
-      Name = "${var.cluster_name}-coredns"
-    }
-  )
-
-  depends_on = [
-    aws_eks_node_group.this
-  ]
-}
-
-# Kube-proxy Add-on
-resource "aws_eks_addon" "kube_proxy" {
-  count = var.enable_kube_proxy ? 1 : 0
-
-  cluster_name                = aws_eks_cluster.this.name
-  addon_name                 = "kube-proxy"
-  addon_version              = var.addon_version_preferences.kube_proxy == "latest" ? data.aws_eks_addon_version.kube_proxy[0].version : var.addon_version_preferences.kube_proxy
-  resolve_conflicts_on_create = var.addon_conflict_resolution.on_create
-  resolve_conflicts_on_update = var.addon_conflict_resolution.on_update
-  configuration_values       = jsonencode(var.addon_configurations.kube_proxy)
-
-  timeouts {
-    create = var.addon_timeouts.create
-    update = var.addon_timeouts.update
-    delete = var.addon_timeouts.delete
-  }
-
-  tags = merge(
-    var.tags,
-    var.addon_tags,
-    {
-      Name = "${var.cluster_name}-kube-proxy"
-    }
-  )
-
-  depends_on = [
-    aws_eks_node_group.this
-  ]
-}
-
-# EBS CSI Driver Add-on
-resource "aws_eks_addon" "ebs_csi" {
-  count = var.enable_ebs_csi_driver ? 1 : 0
-
-  cluster_name                = aws_eks_cluster.this.name
-  addon_name                 = "aws-ebs-csi-driver"
-  addon_version              = var.addon_version_preferences.ebs_csi == "latest" ? data.aws_eks_addon_version.ebs_csi[0].version : var.addon_version_preferences.ebs_csi
-  resolve_conflicts_on_create = var.addon_conflict_resolution.on_create
-  resolve_conflicts_on_update = var.addon_conflict_resolution.on_update
-  configuration_values       = jsonencode(var.addon_configurations.ebs_csi)
-  service_account_role_arn   = aws_iam_role.ebs_csi_driver[0].arn
-
-  timeouts {
-    create = var.addon_timeouts.create
-    update = var.addon_timeouts.update
-    delete = var.addon_timeouts.delete
-  }
-
-  tags = merge(
-    var.tags,
-    var.addon_tags,
-    {
-      Name = "${var.cluster_name}-ebs-csi-driver"
-    }
-  )
-
-  depends_on = [
-    aws_eks_node_group.this
-  ]
-}
-
 # Add-on Version Data Sources
-data "aws_eks_addon_version" "vpc_cni" {
-  count = var.enable_vpc_cni ? 1 : 0
+data "aws_eks_addon_version" "addons" {
+  for_each = { for k, v in local.addons : k => v if v.enabled }
 
-  addon_name         = "vpc-cni"
+  addon_name         = each.value.name
   kubernetes_version = aws_eks_cluster.this.version
-  most_recent        = var.addon_version_preferences.vpc_cni == "latest" ? true : false
+  most_recent        = var.addon_version_preferences[each.key] == "latest"
 }
 
-data "aws_eks_addon_version" "coredns" {
-  count = var.enable_coredns ? 1 : 0
+# Add-ons
+resource "aws_eks_addon" "addons" {
+  for_each = { for k, v in local.addons : k => v if v.enabled }
 
-  addon_name         = "coredns"
-  kubernetes_version = aws_eks_cluster.this.version
-  most_recent        = var.addon_version_preferences.coredns == "latest" ? true : false
+  cluster_name                = aws_eks_cluster.this.name
+  addon_name                  = each.value.name
+  addon_version               = data.aws_eks_addon_version.addons[each.key].version
+  resolve_conflicts_on_create = var.addon_conflict_resolution.on_create
+  resolve_conflicts_on_update = var.addon_conflict_resolution.on_update
+
+  # Special handling for EBS CSI driver
+  service_account_role_arn = each.key == "ebs_csi" ? aws_iam_role.ebs_csi_driver[0].arn : null
+
+  tags = merge(
+    local.tags,
+    var.addon_tags,
+    {
+      Name = "${var.cluster_name}-${each.key}"
+    }
+  )
+
+  depends_on = [
+    aws_eks_node_group.this
+  ]
 }
 
-data "aws_eks_addon_version" "kube_proxy" {
-  count = var.enable_kube_proxy ? 1 : 0
+# VPC Endpoints
+resource "aws_vpc_endpoint" "endpoints" {
+  for_each = local.vpc_endpoints
 
-  addon_name         = "kube-proxy"
-  kubernetes_version = aws_eks_cluster.this.version
-  most_recent        = var.addon_version_preferences.kube_proxy == "latest" ? true : false
+  vpc_id              = var.vpc_id
+  service_name        = "com.amazonaws.${var.region}.${each.value.service}"
+  vpc_endpoint_type   = each.value.type
+  security_group_ids  = var.create_security_group ? [aws_security_group.cluster[0].id] : []
+  subnet_ids          = var.subnet_ids
+  private_dns_enabled = true
+
+  tags = merge(
+    local.tags,
+    {
+      Name = "${var.cluster_name}-${each.key}-endpoint"
+    }
+  )
+
+  depends_on = [aws_security_group.cluster]
 }
 
-data "aws_eks_addon_version" "ebs_csi" {
-  count = var.enable_ebs_csi_driver ? 1 : 0
-
-  addon_name         = "aws-ebs-csi-driver"
-  kubernetes_version = aws_eks_cluster.this.version
-  most_recent        = var.addon_version_preferences.ebs_csi == "latest" ? true : false
-}

@@ -68,7 +68,7 @@ variable "single_nat_gateway" {
 variable "map_public_ip_on_launch" {
   description = "Should be true if you want to auto-assign public IP on launch for public subnets"
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "enable_flow_log" {
@@ -120,7 +120,7 @@ variable "public_subnet_tags" {
 }
 
 variable "private_subnet_tags" {
-  description = "Additional tags for the private subnets" 
+  description = "Additional tags for the private subnets"
   type        = map(string)
   default     = {}
 }

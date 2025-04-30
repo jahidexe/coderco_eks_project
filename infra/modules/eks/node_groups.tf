@@ -21,12 +21,7 @@ resource "aws_iam_role" "node_group" {
     ]
   })
 
-  tags = merge(
-    var.tags,
-    {
-      Name = "${var.cluster_name}-${each.key}-node-group-role"
-    }
-  )
+  tags = local.tags
 }
 
 # Node Group IAM Policy Attachments
@@ -66,12 +61,21 @@ resource "aws_eks_node_group" "this" {
     min_size     = each.value.min_size
   }
 
-  instance_types = each.value.instance_types
-  capacity_type  = each.value.capacity_type
-  ami_type       = each.value.ami_type
-  disk_size      = each.value.disk_size
+  launch_template {
+    id      = aws_launch_template.node_group[each.key].id
+    version = aws_launch_template.node_group[each.key].latest_version
+  }
 
-  labels = each.value.labels
+  capacity_type = each.value.capacity_type
+  ami_type      = each.value.ami_type
+  disk_size     = each.value.disk_size
+
+  labels = merge(
+    each.value.labels,
+    {
+      "node.kubernetes.io/instance-type" = each.value.instance_types[0]
+    }
+  )
 
   dynamic "taint" {
     for_each = each.value.taints
@@ -86,45 +90,99 @@ resource "aws_eks_node_group" "this" {
     max_unavailable_percentage = each.value.update_config.max_unavailable_percentage
   }
 
-  tags = merge(
-    var.tags,
-    each.value.tags,
-    {
-      Name = "${var.cluster_name}-${each.key}-node-group"
-    }
-  )
+  # Enable node auto-repair
+  lifecycle {
+    create_before_destroy = true
+  }
 
-  depends_on = [
-    aws_iam_role_policy_attachment.node_group_policies,
-    aws_iam_role_policy_attachment.node_group_cni_policies,
-    aws_iam_role_policy_attachment.node_group_ecr_policies
-  ]
+  tags = local.tags
 }
 
-# Fargate Profiles
-resource "aws_eks_fargate_profile" "this" {
-  for_each = var.fargate_profiles
+# Launch Template for Node Groups
+resource "aws_launch_template" "node_group" {
+  for_each = var.managed_node_groups
 
-  cluster_name           = aws_eks_cluster.this.name
-  fargate_profile_name   = each.value.name
-  pod_execution_role_arn = aws_iam_role.fargate[each.key].arn
-  subnet_ids            = each.value.subnet_ids
+  name_prefix   = "${var.cluster_name}-${each.key}-"
+  image_id      = data.aws_ami.eks_optimized[each.key].id
+  instance_type = each.value.instance_types[0]
+  user_data = base64encode(templatefile("${path.module}/templates/userdata.sh", {
+    cluster_name        = var.cluster_name
+    cluster_endpoint    = aws_eks_cluster.this.endpoint
+    cluster_auth_base64 = aws_eks_cluster.this.certificate_authority[0].data
+  }))
 
-  dynamic "selector" {
-    for_each = each.value.selectors
-    content {
-      namespace = selector.value.namespace
-      labels    = selector.value.labels
-    }
+  vpc_security_group_ids = var.create_security_group ? [aws_security_group.node[0].id] : []
+
+  metadata_options {
+    http_endpoint               = "enabled"
+    http_tokens                 = "required"
+    http_put_response_hop_limit = 1
+  }
+
+  tag_specifications {
+    resource_type = "instance"
+    tags = merge(
+      var.tags,
+      each.value.tags,
+      {
+        Name = "${var.cluster_name}-${each.key}-node"
+      }
+    )
+  }
+
+  tag_specifications {
+    resource_type = "volume"
+    tags = merge(
+      var.tags,
+      each.value.tags,
+      {
+        Name = "${var.cluster_name}-${each.key}-volume"
+      }
+    )
   }
 
   tags = merge(
     var.tags,
     each.value.tags,
     {
-      Name = "${var.cluster_name}-${each.key}-fargate-profile"
+      Name = "${var.cluster_name}-${each.key}-launch-template"
     }
   )
+}
+
+# EKS Optimized AMI
+data "aws_ami" "eks_optimized" {
+  for_each = var.managed_node_groups
+
+  most_recent = true
+  owners      = ["amazon"]
+
+  filter {
+    name   = "name"
+    values = ["amazon-eks-node-${var.kubernetes_version}-*"]
+  }
+
+  filter {
+    name   = "architecture"
+    values = ["x86_64"]
+  }
+}
+
+# Fargate Profile
+resource "aws_eks_fargate_profile" "this" {
+  for_each = var.fargate_profiles
+
+  cluster_name           = aws_eks_cluster.this.name
+  fargate_profile_name   = each.value.name
+  pod_execution_role_arn = aws_iam_role.fargate[each.key].arn
+  subnet_ids             = var.subnet_ids
+
+  selector {
+    namespace = each.value.namespace
+    labels    = each.value.labels
+  }
+
+  tags = local.tags
 }
 
 # Fargate IAM Role
@@ -146,12 +204,7 @@ resource "aws_iam_role" "fargate" {
     ]
   })
 
-  tags = merge(
-    var.tags,
-    {
-      Name = "${var.cluster_name}-${each.key}-fargate-role"
-    }
-  )
+  tags = local.tags
 }
 
 # Fargate IAM Policy Attachments
@@ -160,4 +213,4 @@ resource "aws_iam_role_policy_attachment" "fargate_policies" {
 
   role       = aws_iam_role.fargate[each.key].name
   policy_arn = "arn:aws:iam::aws:policy/AmazonEKSFargatePodExecutionRolePolicy"
-} 
+}

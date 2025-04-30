@@ -1,181 +1,151 @@
 ###############################################
-# security.tf - EKS Security Configurations
+# security.tf - EKS Security Group Configurations
 ###############################################
 
-# Node Security Group
-resource "aws_security_group" "node" {
-  name        = "${var.cluster_name}-node-sg"
-  description = "Security group for EKS worker nodes"
+data "aws_subnets" "all" {
+  filter {
+    name   = "vpc-id"
+    values = [var.vpc_id]
+  }
+}
+
+locals {
+  # Use dynamic fallback to cover all subnets if none explicitly passed
+  subnet_ids = length(var.subnet_ids) > 0 ? var.subnet_ids : data.aws_subnets.all.ids
+}
+
+# EKS Cluster Security Group
+
+
+#checkov:skip=CKV2_AWS_5: "Security group is attached to EKS cluster via aws_eks_cluster.vpc_config.security_group_ids"
+resource "aws_security_group" "cluster" {
+  count = var.create_security_group ? 1 : 0
+resource "aws_security_group" "cluster" {
+  count = var.create_security_group ? 1 : 0
+
+  name_prefix = "${local.names.cluster_sg}-"
+  description = "EKS cluster security group with managed rules for cluster ${var.cluster_name}"
   vpc_id      = var.vpc_id
 
   tags = merge(
-    var.tags,
+    local.resource_tags["cluster_sg"],
     {
-      Name = "${var.cluster_name}-node-sg"
+      "kubernetes.io/cluster/${var.cluster_name}" = "owned"
     }
   )
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
-# Node Security Group Rules
-resource "aws_security_group_rule" "node_ingress_self" {
-  description              = "Allow nodes to communicate with each other"
-  from_port                = 0
-  to_port                  = 0
-  protocol                 = "-1"
-  security_group_id        = aws_security_group.node.id
-  source_security_group_id = aws_security_group.node.id
-  type                     = "ingress"
+# Node Security Group
+
+#checkov:skip=CKV2_AWS_5: "Security group is attached to EKS launch template via vpc_security_group_ids"
+resource "aws_security_group" "node" {
+  count = var.create_security_group ? 1 : 0
+
+  name_prefix = "${local.names.node_sg}-"
+  description = "EKS node security group with managed rules for cluster ${var.cluster_name}"
+  vpc_id      = var.vpc_id
+
+  tags = merge(
+    local.resource_tags["node_sg"],
+    {
+      "kubernetes.io/cluster/${var.cluster_name}" = "owned"
+    }
+  )
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
-resource "aws_security_group_rule" "node_ingress_cluster" {
-  description              = "Allow worker Kubelets and pods to receive communication from the cluster control plane"
-  from_port                = 1025
-  to_port                  = 65535
-  protocol                 = "tcp"
-  security_group_id        = aws_security_group.node.id
-  source_security_group_id = aws_security_group.cluster.id
-  type                     = "ingress"
-}
+# Add specific ingress/egress rules with proper descriptions
+resource "aws_security_group_rule" "cluster_egress" {
+  count = var.create_security_group ? 1 : 0
 
-resource "aws_security_group_rule" "node_egress_internet" {
-  description       = "Allow nodes to communicate with the internet"
+  description       = "Allow cluster egress access to node groups and endpoints"
+  protocol          = "-1"
+  security_group_id = aws_security_group.cluster[0].id
+  cidr_blocks       = [var.vpc_cidr]
   from_port         = 0
   to_port           = 0
-  protocol          = "-1"
-  security_group_id = aws_security_group.node.id
-  cidr_blocks       = ["0.0.0.0/0"]
   type              = "egress"
 }
 
-# Additional Node Security Group Rules
-resource "aws_security_group_rule" "node_additional_rules" {
-  for_each = var.node_security_group_additional_rules
+# Node group egress rules with specific protocols and ports
+resource "aws_security_group_rule" "node_egress_https" {
+  count = var.create_security_group ? 1 : 0
 
-  description       = each.value.description
-  from_port         = each.value.from_port
-  to_port           = each.value.to_port
-  protocol          = each.value.protocol
-  security_group_id = aws_security_group.node.id
-  cidr_blocks       = each.value.cidr_blocks
-  type              = each.value.type
+  description       = "Allow node groups HTTPS egress for ECR and other HTTPS services"
+  protocol          = "tcp"
+  security_group_id = aws_security_group.node[0].id
+  cidr_blocks       = ["0.0.0.0/0"]
+  from_port         = 443
+  to_port           = 443
+  type              = "egress"
 }
 
-# Network Policy Configuration
-resource "aws_eks_cluster" "network_policy" {
-  count = var.enable_network_policy ? 1 : 0
+resource "aws_security_group_rule" "node_egress_http" {
+  count = var.create_security_group ? 1 : 0
 
-  name     = aws_eks_cluster.this.name
-  role_arn = aws_iam_role.cluster.arn
-  version  = var.kubernetes_version
-
-  vpc_config {
-    subnet_ids              = var.subnet_ids
-    endpoint_private_access = var.endpoint_private_access
-    endpoint_public_access  = var.endpoint_public_access
-    public_access_cidrs     = var.public_access_cidrs
-    security_group_ids      = [aws_security_group.cluster.id]
-  }
-
-  kubernetes_network_config {
-    service_ipv4_cidr = var.service_ipv4_cidr
-    ip_family         = var.ip_family
-  }
-
-  enabled_cluster_log_types = var.enabled_cluster_log_types
-
-  encryption_config {
-    provider {
-      key_arn = aws_kms_key.cluster.arn
-    }
-    resources = ["secrets"]
-  }
-
-  tags = merge(
-    var.tags,
-    var.cluster_tags,
-    {
-      Name = var.cluster_name
-    }
-  )
-
-  depends_on = [
-    aws_iam_role_policy_attachment.cluster_policies,
-    aws_cloudwatch_log_group.eks_logs
-  ]
+  description       = "Allow node groups HTTP egress for package updates"
+  protocol          = "tcp"
+  security_group_id = aws_security_group.node[0].id
+  cidr_blocks       = ["0.0.0.0/0"]
+  from_port         = 80
+  to_port           = 80
+  type              = "egress"
 }
 
-# Pod Security Standards Configuration
-resource "kubernetes_namespace" "baseline" {
-  count = var.pod_security_standards.enabled ? 1 : 0
+resource "aws_security_group_rule" "node_egress_ntp" {
+  count = var.create_security_group ? 1 : 0
 
-  metadata {
-    name = "baseline"
-    labels = {
-      "pod-security.kubernetes.io/enforce" = "baseline"
-      "pod-security.kubernetes.io/warn"    = "restricted"
-      "pod-security.kubernetes.io/audit"   = "restricted"
-    }
-  }
+  description       = "Allow node groups NTP egress for time synchronization"
+  protocol          = "udp"
+  security_group_id = aws_security_group.node[0].id
+  cidr_blocks       = ["0.0.0.0/0"]
+  from_port         = 123
+  to_port           = 123
+  type              = "egress"
 }
 
-resource "kubernetes_namespace" "restricted" {
-  count = var.pod_security_standards.enabled ? 1 : 0
+resource "aws_security_group_rule" "node_egress_dns" {
+  count = var.create_security_group ? 1 : 0
 
-  metadata {
-    name = "restricted"
-    labels = {
-      "pod-security.kubernetes.io/enforce" = "restricted"
-      "pod-security.kubernetes.io/warn"    = "restricted"
-      "pod-security.kubernetes.io/audit"   = "restricted"
-    }
-  }
+  description       = "Allow node groups DNS egress"
+  protocol          = "udp"
+  security_group_id = aws_security_group.node[0].id
+  cidr_blocks       = ["0.0.0.0/0"]
+  from_port         = 53
+  to_port           = 53
+  type              = "egress"
 }
 
-# Container Insights Configuration
-resource "aws_cloudwatch_log_group" "container_insights" {
-  count = var.enable_container_insights ? 1 : 0
+resource "aws_security_group_rule" "node_egress_vpc" {
+  count = var.create_security_group ? 1 : 0
 
-  name              = "/aws/containerinsights/${var.cluster_name}/application"
-  retention_in_days = var.log_retention_days
-
-  tags = merge(
-    var.tags,
-    {
-      Name = "${var.cluster_name}-container-insights"
-    }
-  )
+  description       = "Allow node groups egress to VPC CIDR"
+  protocol          = "-1"
+  security_group_id = aws_security_group.node[0].id
+  cidr_blocks       = [var.vpc_cidr]
+  from_port         = 0
+  to_port           = 0
+  type              = "egress"
 }
 
-# CloudWatch Agent Configuration
-resource "aws_iam_role" "cloudwatch_agent" {
-  count = var.enable_cloudwatch_metrics ? 1 : 0
+# Add cluster security group rules from locals
+resource "aws_security_group_rule" "cluster_rules" {
+  for_each = var.create_security_group ? local.cluster_security_group_rules : {}
 
-  name = "${var.cluster_name}-cloudwatch-agent"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Action = "sts:AssumeRole"
-        Effect = "Allow"
-        Principal = {
-          Service = "ec2.amazonaws.com"
-        }
-      }
-    ]
-  })
-
-  tags = merge(
-    var.tags,
-    {
-      Name = "${var.cluster_name}-cloudwatch-agent"
-    }
-  )
+  security_group_id        = aws_security_group.cluster[0].id
+  description              = each.value.description
+  type                     = each.value.type
+  from_port                = each.value.from_port
+  to_port                  = each.value.to_port
+  protocol                 = each.value.protocol
+  cidr_blocks              = try(each.value.cidr_blocks, null)
+  source_security_group_id = try(each.value.source_security_group_id, null)
+  self                     = try(each.value.self, null)
 }
-
-resource "aws_iam_role_policy_attachment" "cloudwatch_agent" {
-  count = var.enable_cloudwatch_metrics ? 1 : 0
-
-  role       = aws_iam_role.cloudwatch_agent[0].name
-  policy_arn = "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
-} 
