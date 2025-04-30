@@ -20,8 +20,8 @@ locals {
     var.tags,
     {
       "kubernetes.io/cluster/${var.cluster_name}" = "owned"
-      ManagedBy = "terraform"
-      Cluster   = var.cluster_name
+      ManagedBy                                   = "terraform"
+      Cluster                                     = var.cluster_name
     }
   )
 
@@ -128,7 +128,7 @@ locals {
 
   # Final security rules with consistent types
   cluster_security_group_rules = var.maintain_default_security_group_rules ? merge(local.default_rules.cluster, local.custom_cluster_rules) : local.custom_cluster_rules
-  node_security_group_rules = var.maintain_default_security_group_rules ? merge(local.default_rules.nodes, local.custom_node_rules) : local.custom_node_rules
+  node_security_group_rules    = var.maintain_default_security_group_rules ? merge(local.default_rules.nodes, local.custom_node_rules) : local.custom_node_rules
 
   # Feature flags with consistent types
   features = {
