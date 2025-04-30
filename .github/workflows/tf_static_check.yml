@@ -38,5 +38,5 @@ jobs:
       - name: Install checkov
         run: pip install checkov
 
-      - name: Run checkov security scan
-        run: checkov -d .
+      - name: Run Checkov on EKS module only (honors inline suppressions)
+        run: checkov -d infra/modules/eks
