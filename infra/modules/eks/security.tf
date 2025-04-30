@@ -15,7 +15,11 @@ locals {
 }
 
 # EKS Cluster Security Group
-#checkov:skip=CKV2_AWS_5: "Security group is attached to EKS cluster and launch template"
+
+
+#checkov:skip=CKV2_AWS_5: "Security group is attached to EKS cluster via aws_eks_cluster.vpc_config.security_group_ids"
+resource "aws_security_group" "cluster" {
+  count = var.create_security_group ? 1 : 0
 resource "aws_security_group" "cluster" {
   count = var.create_security_group ? 1 : 0
 
@@ -36,7 +40,8 @@ resource "aws_security_group" "cluster" {
 }
 
 # Node Security Group
-#checkov:skip=CKV2_AWS_5: "Security group is attached to EKS cluster and launch template"
+
+#checkov:skip=CKV2_AWS_5: "Security group is attached to EKS launch template via vpc_security_group_ids"
 resource "aws_security_group" "node" {
   count = var.create_security_group ? 1 : 0
 
