@@ -122,7 +122,8 @@ resource "aws_eks_cluster" "this" {
   # Ensure IAM role permissions are created before cluster
   depends_on = [
     aws_iam_role_policy_attachment.cluster_policies,
-    aws_cloudwatch_log_group.eks_logs
+    aws_cloudwatch_log_group.eks_logs,
+    aws_security_group.cluster
   ]
 
   lifecycle {
@@ -231,7 +232,7 @@ resource "aws_vpc_endpoint" "endpoints" {
   vpc_id              = var.vpc_id
   service_name        = "com.amazonaws.${var.region}.${each.value.service}"
   vpc_endpoint_type   = each.value.type
-  security_group_ids  = [aws_security_group.cluster[0].id]
+  security_group_ids  = var.create_security_group ? [aws_security_group.cluster[0].id] : []
   subnet_ids          = var.subnet_ids
   private_dns_enabled = true
 
@@ -241,5 +242,7 @@ resource "aws_vpc_endpoint" "endpoints" {
       Name = "${var.cluster_name}-${each.key}-endpoint"
     }
   )
+
+  depends_on = [aws_security_group.cluster]
 }
 

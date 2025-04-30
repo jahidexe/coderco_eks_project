@@ -32,6 +32,8 @@ resource "aws_security_group" "cluster" {
   lifecycle {
     create_before_destroy = true
   }
+
+  depends_on = [aws_eks_cluster.this]
 }
 
 # Node Security Group
@@ -52,6 +54,22 @@ resource "aws_security_group" "node" {
   lifecycle {
     create_before_destroy = true
   }
+}
+
+# Security Group Association for Cluster
+resource "aws_security_group_attachment" "cluster" {
+  count = var.create_security_group ? 1 : 0
+
+  security_group_id = aws_security_group.cluster[0].id
+  instance         = aws_eks_cluster.this.id
+}
+
+# Security Group Association for Node Groups
+resource "aws_security_group_attachment" "node" {
+  count = var.create_security_group ? length(aws_eks_node_group.this) : 0
+
+  security_group_id = aws_security_group.node[0].id
+  instance         = values(aws_eks_node_group.this)[count.index].id
 }
 
 # Add specific ingress/egress rules with proper descriptions
