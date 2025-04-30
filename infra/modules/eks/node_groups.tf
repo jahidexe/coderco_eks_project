@@ -214,30 +214,3 @@ resource "aws_iam_role_policy_attachment" "fargate_policies" {
   role       = aws_iam_role.fargate[each.key].name
   policy_arn = "arn:aws:iam::aws:policy/AmazonEKSFargatePodExecutionRolePolicy"
 }
-
-#checkov:skip=CKV2_AWS_5: "Security group is attached to EKS node group launch template in node_groups.tf (vpc_security_group_ids)"
-resource "aws_security_group" "node" {
-  ...
-}
-
-#checkov:skip=CKV2_AWS_5: "Security group is attached to EKS cluster vpc_config and VPC endpoints"
-resource "aws_security_group" "cluster" {
-  ...
-}
-
-# VPC Endpoints
-resource "aws_vpc_endpoint" "endpoints" {
-  ...
-  security_group_ids  = var.create_security_group ? [aws_security_group.cluster[0].id] : []
-  ...
-}
-
-# EKS Cluster
-resource "aws_eks_cluster" "this" {
-  ...
-  vpc_config {
-    ...
-    security_group_ids      = var.create_security_group ? [aws_security_group.cluster[0].id] : []
-  }
-  ...
-}
