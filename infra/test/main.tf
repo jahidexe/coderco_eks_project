@@ -45,7 +45,7 @@
 
 
 module "vpc" {
-  source = "git::https://github.com/terraform-aws-modules/terraform-aws-vpc.git?ref=5f5df57" # v5.5.2
+  source = "git::https://github.com/terraform-aws-modules/terraform-aws-vpc.git?ref=v5.5.2" # Using stable version
 
   name = "test-vpc"
   cidr = "10.0.0.0/16"

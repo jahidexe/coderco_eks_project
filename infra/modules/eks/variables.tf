@@ -481,8 +481,8 @@ variable "addon_tags" {
 }
 
 # Security Group Variables
-variable "create_node_security_group" {
-  description = "Whether to create a security group for the EKS nodes"
+variable "create_security_group" {
+  description = "Whether to create security groups for the EKS cluster and nodes"
   type        = bool
   default     = true
 }

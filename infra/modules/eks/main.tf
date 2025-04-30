@@ -100,7 +100,7 @@ resource "aws_eks_cluster" "this" {
     subnet_ids              = var.subnet_ids
     endpoint_private_access = local.features.private_access
     endpoint_public_access  = local.features.public_access
-    security_group_ids      = var.create_cluster_security_group ? [aws_security_group.cluster[0].id] : []
+    security_group_ids      = var.create_security_group ? [aws_security_group.cluster[0].id] : []
   }
 
   kubernetes_network_config {
@@ -117,7 +117,7 @@ resource "aws_eks_cluster" "this" {
     resources = ["secrets"]
   }
 
-  tags = local.common_tags
+  tags = local.tags
 
   # Ensure IAM role permissions are created before cluster
   depends_on = [
@@ -212,7 +212,7 @@ resource "aws_eks_addon" "addons" {
   service_account_role_arn = each.key == "ebs_csi" ? aws_iam_role.ebs_csi_driver[0].arn : null
 
   tags = merge(
-    local.common_tags,
+    local.tags,
     var.addon_tags,
     {
       Name = "${var.cluster_name}-${each.key}"
@@ -236,7 +236,7 @@ resource "aws_vpc_endpoint" "endpoints" {
   private_dns_enabled = true
 
   tags = merge(
-    local.common_tags,
+    local.tags,
     {
       Name = "${var.cluster_name}-${each.key}-endpoint"
     }

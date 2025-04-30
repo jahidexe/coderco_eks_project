@@ -16,18 +16,19 @@ locals {
   }
 
   # Common tag structure
-  common_tags = merge(
+  tags = merge(
     var.tags,
     {
-      Cluster   = var.cluster_name
+      "kubernetes.io/cluster/${var.cluster_name}" = "owned"
       ManagedBy = "terraform"
+      Cluster   = var.cluster_name
     }
   )
 
-  # Function to create resource-specific tags
+  # Common tag structure for resources
   resource_tags = {
     for key, name in local.names : key => merge(
-      local.common_tags,
+      local.tags,
       { Name = name }
     )
   }
@@ -126,10 +127,8 @@ locals {
   }
 
   # Final security rules with consistent types
-  security_rules = {
-    cluster = var.maintain_default_security_group_rules ? merge(local.default_rules.cluster, local.custom_cluster_rules) : local.custom_cluster_rules
-    nodes   = var.maintain_default_security_group_rules ? merge(local.default_rules.nodes, local.custom_node_rules) : local.custom_node_rules
-  }
+  cluster_security_group_rules = var.maintain_default_security_group_rules ? merge(local.default_rules.cluster, local.custom_cluster_rules) : local.custom_cluster_rules
+  node_security_group_rules = var.maintain_default_security_group_rules ? merge(local.default_rules.nodes, local.custom_node_rules) : local.custom_node_rules
 
   # Feature flags with consistent types
   features = {

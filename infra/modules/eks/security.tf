@@ -128,19 +128,17 @@ resource "aws_security_group_rule" "node_egress_vpc" {
   type              = "egress"
 }
 
-# Add other security group rules from locals with proper descriptions
-dynamic "aws_security_group_rule" "cluster_rules" {
-  for_each = local.cluster_security_group_rules
+# Add cluster security group rules from locals
+resource "aws_security_group_rule" "cluster_rules" {
+  for_each = var.create_security_group ? local.cluster_security_group_rules : {}
 
-  content {
-    security_group_id        = aws_security_group.cluster[0].id
-    description              = each.value.description
-    type                     = each.value.type
-    from_port                = each.value.from_port
-    to_port                  = each.value.to_port
-    protocol                 = each.value.protocol
-    cidr_blocks              = try(each.value.cidr_blocks, null)
-    source_security_group_id = try(each.value.source_security_group_id, null)
-    self                     = try(each.value.self, null)
-  }
+  security_group_id        = aws_security_group.cluster[0].id
+  description              = each.value.description
+  type                     = each.value.type
+  from_port                = each.value.from_port
+  to_port                  = each.value.to_port
+  protocol                 = each.value.protocol
+  cidr_blocks              = try(each.value.cidr_blocks, null)
+  source_security_group_id = try(each.value.source_security_group_id, null)
+  self                     = try(each.value.self, null)
 }
