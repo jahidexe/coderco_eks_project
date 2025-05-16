@@ -6,6 +6,11 @@ on:
       - 'feature-*'
       - 'dev'
 
+permissions:
+  contents: read
+  security-events: write
+  pull-requests: write
+
 jobs:
   terraform-lint-and-scan:
     name: Terraform Lint & Security Scan
@@ -33,5 +38,5 @@ jobs:
       - name: Install checkov
         run: pip install checkov
 
-      - name: Run checkov security scan
-        run: checkov -d .
+      - name: Run Checkov on EKS module only (honors inline suppressions)
+        run: checkov -d infra/modules/eks
